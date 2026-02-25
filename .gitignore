@@ -4,3 +4,4 @@ out
 build
 .codex-guard/
 .DS_Store
+next-env.d.ts
