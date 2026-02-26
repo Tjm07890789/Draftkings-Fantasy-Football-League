@@ -71,8 +71,9 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
   );
+  const rankColWidth = "4ch";
   const nameColWidth = `${Math.max(longestNameChars + 2, 16)}ch`;
-  const dataColWidth = "calc((100% - var(--name-col-width) - 2px) / 21)";
+  const dataColWidth = "calc((100% - var(--rank-col-width) - var(--name-col-width) - 2px) / 21)";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
@@ -133,13 +134,27 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
   return (
     <section
       className="m-0 w-full max-w-full overflow-hidden rounded-xl border border-white/30 bg-green-950/65 p-0 shadow-xl shadow-black/25 md:h-full"
-      style={{ ["--name-col-width" as string]: nameColWidth } as React.CSSProperties}
+      style={
+        {
+          ["--rank-col-width" as string]: rankColWidth,
+          ["--name-col-width" as string]: nameColWidth,
+        } as React.CSSProperties
+      }
     >
-      <h2 className="px-3 py-2 text-lg font-bold text-white">{title}</h2>
+      <h2 className="flex items-center justify-between px-3 py-2 text-lg font-bold text-white">
+        <span>{title}</span>
+        <span className="text-sm font-semibold text-green-100">{rows.length} participants</span>
+      </h2>
       <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3rem)] md:overflow-hidden">
         <Table className="table-fixed w-full max-w-full overflow-hidden text-[0.78rem]">
           <TableHeader>
             <TableRow className="h-4 py-0 text-[0.78rem]">
+              <TableHead
+                className="sticky top-0 z-20 h-4 bg-green-950/95 px-0 py-0 text-center text-[0.78rem]"
+                style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
+              >
+                #
+              </TableHead>
               <TableHead
                 className="sticky top-0 z-20 h-4 bg-green-950/95 px-1 py-0 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
@@ -191,8 +206,14 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedRows.map((row) => (
+            {sortedRows.map((row, index) => (
               <TableRow key={row.name} className="h-4 py-0 text-[0.78rem]">
+                <TableCell
+                  className="h-4 px-0 py-0 text-center text-[0.78rem] font-semibold"
+                  style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
+                >
+                  {index + 1}
+                </TableCell>
                 <TableCell
                   className="h-4 px-1 py-0 text-[0.78rem] font-semibold whitespace-nowrap"
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
@@ -220,6 +241,12 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
               </TableRow>
             ))}
             <TableRow className="h-4 bg-emerald-900/45 py-0 text-[0.78rem]">
+              <TableCell
+                className="h-4 px-0 py-0 text-center text-[0.78rem] font-bold"
+                style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
+              >
+                -
+              </TableCell>
               <TableCell
                 className="h-4 px-1 py-0 text-[0.78rem] font-bold whitespace-nowrap"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
@@ -260,6 +287,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
+  const participantCount =
+    view === "previous" ? previousRows.length : currentRows.length;
 
   React.useEffect(() => {
     const savedView = getCookie(NAV_COOKIE);
@@ -297,11 +326,13 @@ export function DFSApp({ data }: { data: LeagueData }) {
           />
           <h1 className="text-2xl font-bold tracking-wide">DFS Football League</h1>
         </div>
-        <div className="text-sm font-semibold text-green-100">2025 | 19 participants | $10k pool</div>
+        <div className="text-sm font-semibold text-green-100">
+          2025 | {participantCount} participants | $10k pool
+        </div>
       </header>
 
       <div className="relative m-0 p-0 pt-20 md:flex md:h-[calc(100vh-5rem)] md:overflow-hidden">
-        <aside className="top-20 left-0 w-full border-b border-white/25 bg-green-950/60 px-[5px] py-4 md:fixed md:h-[calc(100vh-5rem)] md:w-[10%] md:border-r md:border-b-0">
+        <aside className="top-20 left-0 w-full border-b border-white/25 bg-green-950/60 px-[5px] py-4 md:fixed md:h-[calc(100vh-5rem)] md:w-[9.5%] md:border-r md:border-b-0">
           <nav className="space-y-5">
             <button
               type="button"
@@ -345,7 +376,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </nav>
         </aside>
 
-        <main className="m-0 w-full overflow-auto px-[5px] md:ml-[10%] md:flex md:h-[calc(100vh-5rem)] md:w-[90%] md:items-center md:justify-center md:overflow-hidden md:px-[5px]">
+        <main className="m-0 w-full overflow-auto px-[5px] md:ml-[9.5%] md:flex md:h-[calc(100vh-5rem)] md:w-[90.5%] md:items-center md:justify-center md:overflow-hidden md:px-[5px]">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
