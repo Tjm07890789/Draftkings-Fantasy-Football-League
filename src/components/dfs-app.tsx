@@ -67,6 +67,13 @@ function getSortValue(row: SeasonRow, column: SortColumn): string | number {
 }
 
 function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
+  const longestNameChars = React.useMemo(
+    () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
+    [rows],
+  );
+  const nameColWidth = `${Math.max(longestNameChars + 3, 16)}ch`;
+  const dataColWidth = "calc((100% - var(--name-col-width) - 6px) / 21)";
+
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
 
@@ -101,13 +108,19 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
   };
 
   return (
-    <section className="m-0 w-full max-w-full overflow-hidden rounded-xl border border-white/30 bg-green-950/65 p-0 shadow-xl shadow-black/25 md:h-full">
+    <section
+      className="m-0 w-full max-w-full overflow-hidden rounded-xl border border-white/30 bg-green-950/65 p-0 shadow-xl shadow-black/25 md:h-full"
+      style={{ ["--name-col-width" as string]: nameColWidth } as React.CSSProperties}
+    >
       <h2 className="px-3 py-2 text-lg font-bold text-white">{title}</h2>
       <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3rem)] md:overflow-hidden">
         <Table className="table-fixed w-full max-w-full overflow-hidden text-[0.5rem]">
           <TableHeader>
             <TableRow className="h-3 py-0 text-[0.5rem]">
-              <TableHead className="sticky top-0 z-20 h-3 w-[12vw] bg-green-950/95 px-1 py-0 text-xs">
+              <TableHead
+                className="sticky top-0 z-20 h-3 bg-green-950/95 px-1 py-0 text-[0.5rem]"
+                style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
+              >
                 <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer text-left">
                   Name{renderSortLabel("name")}
                 </button>
@@ -115,7 +128,8 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
               {Array.from({ length: 18 }, (_, index) => (
                 <TableHead
                   key={`week-head-${index + 1}`}
-                  className="sticky top-0 z-20 h-3 w-[2.5vw] bg-green-950/95 px-0 py-0 text-center text-[0.3rem]"
+                  className={`sticky top-0 z-20 h-3 bg-green-950/95 py-0 text-center text-[0.5rem] ${index === 0 ? "pl-[6px]" : "px-0"}`}
+                  style={{ width: dataColWidth, minWidth: dataColWidth }}
                 >
                   <button
                     type="button"
@@ -127,17 +141,26 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
                   </button>
                 </TableHead>
               ))}
-              <TableHead className="sticky top-0 z-20 h-3 w-[8vw] bg-green-950/95 px-1 py-0 text-xs">
+              <TableHead
+                className="sticky top-0 z-20 h-3 bg-green-950/95 px-1 py-0 text-[0.5rem]"
+                style={{ width: dataColWidth, minWidth: dataColWidth }}
+              >
                 <button type="button" onClick={() => handleSort("total")} className="w-full cursor-pointer text-left">
                   Total{renderSortLabel("total")}
                 </button>
               </TableHead>
-              <TableHead className="sticky top-0 z-20 h-3 w-[8vw] bg-green-950/95 px-1 py-0 text-xs">
+              <TableHead
+                className="sticky top-0 z-20 h-3 bg-green-950/95 px-1 py-0 text-[0.5rem]"
+                style={{ width: dataColWidth, minWidth: dataColWidth }}
+              >
                 <button type="button" onClick={() => handleSort("avgWeekly")} className="w-full cursor-pointer text-left">
                   Avg Weekly{renderSortLabel("avgWeekly")}
                 </button>
               </TableHead>
-              <TableHead className="sticky top-0 z-20 h-3 w-[8vw] bg-green-950/95 px-1 py-0 text-xs">
+              <TableHead
+                className="sticky top-0 z-20 h-3 bg-green-950/95 px-1 py-0 text-[0.5rem]"
+                style={{ width: dataColWidth, minWidth: dataColWidth }}
+              >
                 <button type="button" onClick={() => handleSort("top10Avg")} className="w-full cursor-pointer text-left">
                   Top10 Avg{renderSortLabel("top10Avg")}
                 </button>
@@ -147,18 +170,30 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
           <TableBody>
             {sortedRows.map((row) => (
               <TableRow key={row.name} className="h-3 py-0 text-[0.5rem]">
-                <TableCell className="h-3 w-[12vw] px-1 py-0 text-xs font-semibold whitespace-nowrap">{row.name}</TableCell>
+                <TableCell
+                  className="h-3 px-1 py-0 text-[0.5rem] font-semibold whitespace-nowrap"
+                  style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
+                >
+                  {row.name}
+                </TableCell>
                 {row.weeks.map((score, index) => (
                   <TableCell
                     key={`${row.name}-week-${index + 1}`}
-                    className={`${row.top10WeekIndexes.includes(index) ? "bg-emerald-400/15 " : ""}h-3 w-[2.5vw] px-0 py-0 text-center text-[0.5rem]`}
+                    className={`${row.top10WeekIndexes.includes(index) ? "bg-emerald-400/15 " : ""}h-3 py-0 text-center text-[0.5rem] ${index === 0 ? "pl-[6px]" : "px-0"}`}
+                    style={{ width: dataColWidth, minWidth: dataColWidth }}
                   >
                     {formatCell(score)}
                   </TableCell>
                 ))}
-                <TableCell className="h-3 w-[8vw] px-1 py-0 text-xs font-semibold">{formatCell(row.total)}</TableCell>
-                <TableCell className="h-3 w-[8vw] px-1 py-0 text-xs">{formatCell(row.avgWeekly)}</TableCell>
-                <TableCell className="h-3 w-[8vw] px-1 py-0 text-xs">{formatCell(row.top10Avg)}</TableCell>
+                <TableCell className="h-3 px-1 py-0 text-[0.5rem] font-semibold" style={{ width: dataColWidth, minWidth: dataColWidth }}>
+                  {formatCell(row.total)}
+                </TableCell>
+                <TableCell className="h-3 px-1 py-0 text-[0.5rem]" style={{ width: dataColWidth, minWidth: dataColWidth }}>
+                  {formatCell(row.avgWeekly)}
+                </TableCell>
+                <TableCell className="h-3 px-1 py-0 text-[0.5rem]" style={{ width: dataColWidth, minWidth: dataColWidth }}>
+                  {formatCell(row.top10Avg)}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
