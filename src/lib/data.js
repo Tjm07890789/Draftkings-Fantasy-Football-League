@@ -1,7 +1,3 @@
-import { spawnSync } from "node:child_process";
-
-const WORKBOOK_PATH =
-  "/Users/tjmmacmini/Email Attachment Downloads/message-19c92d6941f23515/01-DFS 2024.xlsx";
 const TOTAL_WEEKS = 18;
 
 let cachedData = null;
@@ -21,58 +17,6 @@ function getTopWeekIndexes(weeks) {
     })
     .slice(0, 10)
     .map((entry) => entry.index);
-}
-
-function parseWorkbookWithPython() {
-  const pythonScript = `
-import json
-import sys
-from openpyxl import load_workbook
-
-path = sys.argv[1]
-wb = load_workbook(path, data_only=True)
-payload = {}
-
-for ws in wb.worksheets:
-    rows = []
-    for r in range(1, ws.max_row + 1):
-        name = ws.cell(row=r, column=1).value
-        if not isinstance(name, str) or not name.strip():
-            continue
-
-        weeks = []
-        has_numeric_week = False
-        for c in range(4, 22):
-            value = ws.cell(row=r, column=c).value
-            if isinstance(value, (int, float)):
-                weeks.append(float(value))
-                has_numeric_week = True
-            elif value in (None, ""):
-                weeks.append(None)
-            else:
-                try:
-                    weeks.append(float(value))
-                    has_numeric_week = True
-                except Exception:
-                    weeks.append(None)
-
-        if has_numeric_week:
-            rows.append({"name": name.strip(), "weeks": weeks})
-
-    payload[ws.title] = rows
-
-print(json.dumps(payload))
-`;
-
-  const result = spawnSync("python3", ["-c", pythonScript, WORKBOOK_PATH], {
-    encoding: "utf-8",
-  });
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || "Unable to parse workbook");
-  }
-
-  return JSON.parse(result.stdout);
 }
 
 function buildLeagueData(rawSheets) {
@@ -128,10 +72,10 @@ export function getLeagueData() {
   }
 
   try {
-    const rawSheets = parseWorkbookWithPython();
+    const rawSheets = require('./static-data.json');
     cachedData = buildLeagueData(rawSheets);
   } catch (error) {
-    console.error("DFS workbook parse failed:", error);
+    console.error("DFS data load failed:", error);
     cachedData = {
       years: [],
       currentSeasonYear: null,

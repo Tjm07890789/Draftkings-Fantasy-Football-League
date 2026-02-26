@@ -129,7 +129,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           />
           <h1 className="text-2xl font-bold tracking-wide">DFS Football League</h1>
         </div>
-        <div className="text-sm font-semibold text-green-100">2026 | 12 participants | $10k pool</div>
+        <div className="text-sm font-semibold text-green-100">2025 | 19 participants | $10k pool</div>
       </header>
 
       <div className="relative flex h-[calc(100vh-5rem)]">
