@@ -455,6 +455,7 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
 
 function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonRow[]; seasonLabel: string }) {
   type SeasonPanel = "grid" | "statistics";
+  const totalGridColumns = 23;
   const longestNameChars = React.useMemo(
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
@@ -530,8 +531,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         } as React.CSSProperties
       }
     >
-      <div className="sticky top-20 z-30 flex flex-wrap items-center justify-between gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
-        <h2 className="text-lg font-bold text-white">{title}</h2>
+      <div className="sticky top-20 z-30 flex flex-wrap items-center justify-end gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -554,6 +554,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3.5rem)] md:overflow-hidden">
         <Table className="table-fixed w-full max-w-full overflow-hidden text-[0.78rem]">
           <TableHeader>
+            <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
+              <TableHead colSpan={totalGridColumns} className="h-5 px-2 py-1 text-left text-[0.82rem] font-bold text-white">
+                {title}
+              </TableHead>
+            </TableRow>
             <TableRow className="h-4 py-0 text-[0.78rem]">
               <TableHead
                 className="sticky top-0 z-20 h-4 bg-green-950/95 px-0 py-0 text-center text-[0.78rem]"
