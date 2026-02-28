@@ -461,8 +461,8 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
   );
-  const rankColWidth = "76px";
-  const nameColWidth = `${Math.max((longestNameChars + 8) * 9, 280)}px`;
+  const rankColWidth = "56px";
+  const nameColWidth = `${Math.max((longestNameChars + 3) * 9, 190)}px`;
   const dataColWidth = "68px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
@@ -617,7 +617,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       </div>
       {seasonPanel === "grid" && (
       <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3.5rem)] md:overflow-hidden">
-        <Table className="table-fixed w-full min-w-max max-w-none overflow-hidden text-[0.78rem]">
+        <Table className="table-fixed w-max min-w-full max-w-none overflow-hidden text-[0.78rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
               <TableHead colSpan={totalGridColumns} className="h-5 px-2 py-1 text-left text-[0.82rem] font-bold text-white">
@@ -626,16 +626,16 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             </TableRow>
             <TableRow className="h-4 py-0 text-[0.78rem]">
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-2 py-0 text-right text-[0.78rem]"
+                className="sticky top-0 z-20 h-4 bg-green-950/95 px-2 py-0 text-left text-[0.78rem]"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
-                #
+                <span className="pl-1">#</span>
               </TableHead>
               <TableHead
                 className="sticky top-0 z-20 h-4 border-r border-white/25 bg-green-950/95 px-2 py-0 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer pl-3 text-left">
+                <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer pl-1 text-left">
                   Name{renderSortLabel("name")}
                 </button>
               </TableHead>
@@ -685,17 +685,17 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             {sortedRows.map((row, index) => (
               <TableRow key={row.name} className="h-4 py-0 text-[0.78rem]">
                 <TableCell
-                  className="h-4 px-2 py-0 text-right text-[0.78rem] font-semibold tabular-nums"
+                  className="h-4 px-2 py-0 text-left text-[0.78rem] font-semibold tabular-nums"
                   style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
                 >
-                  {index + 1}
+                  <span className="pl-2">{index + 1}</span>
                 </TableCell>
                 <TableCell
                   className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-6 text-[0.78rem] font-semibold whitespace-nowrap"
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
                   title={row.name}
                 >
-                  <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{row.name}</span>
+                  <span className="block max-w-full whitespace-nowrap pl-1">{row.name}</span>
                 </TableCell>
                 {row.weeks.map((score, index) => (
                   <TableCell
@@ -719,16 +719,16 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             ))}
             <TableRow className="h-4 bg-emerald-900/45 py-0 text-[0.78rem]">
               <TableCell
-                className="h-4 px-2 py-0 text-right text-[0.78rem] font-bold tabular-nums"
+                className="h-4 px-2 py-0 text-left text-[0.78rem] font-bold tabular-nums"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
-                -
+                <span className="pl-2">-</span>
               </TableCell>
               <TableCell
-                className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-6 text-[0.78rem] font-bold whitespace-nowrap"
+                className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 text-[0.78rem] font-bold whitespace-nowrap"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                <span className="block max-w-full whitespace-nowrap pl-1">
                   {displayMode === "points" ? "Weekly Avg" : "Weekly Avg Rank"}
                 </span>
               </TableCell>
