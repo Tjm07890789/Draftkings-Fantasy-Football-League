@@ -624,15 +624,15 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 {title}
               </TableHead>
             </TableRow>
-            <TableRow className="sticky top-0 z-30 h-7 border-b border-white/25 py-0 text-[0.8rem]">
+            <TableRow className="sticky top-[44px] z-30 h-7 border-b border-white/25 py-0 text-[0.8rem]">
               <TableHead
-                className="sticky top-0 z-30 h-7 bg-green-950/95 px-2 py-1 text-left text-[0.78rem]"
+                className="sticky top-[44px] z-30 h-7 bg-green-950/95 px-2 py-1 text-left text-[0.78rem]"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
                 <span className="pl-1">#</span>
               </TableHead>
               <TableHead
-                className="sticky top-0 z-30 h-7 border-r border-white/25 bg-green-950/95 px-2 py-1 text-[0.78rem]"
+                className="sticky top-[44px] z-30 h-7 border-r border-white/25 bg-green-950/95 px-2 py-1 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
                 <button
@@ -646,7 +646,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
               {Array.from({ length: 18 }, (_, index) => (
                 <TableHead
                   key={`week-head-${index + 1}`}
-                  className={`sticky top-0 z-30 h-7 bg-green-950/95 py-1 text-center text-[0.8rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
+                  className={`sticky top-[44px] z-30 h-7 bg-green-950/95 py-1 text-center text-[0.8rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
                   style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
                 >
                   <button
@@ -660,7 +660,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </TableHead>
               ))}
               <TableHead
-                className="sticky top-0 z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
+                className="sticky top-[44px] z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
@@ -672,7 +672,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </button>
               </TableHead>
               <TableHead
-                className="sticky top-0 z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
+                className="sticky top-[44px] z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
@@ -684,7 +684,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </button>
               </TableHead>
               <TableHead
-                className="sticky top-0 z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
+                className="sticky top-[44px] z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
@@ -926,7 +926,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </nav>
         </aside>
 
-        <main className="m-0 w-full overflow-auto px-[5px] md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-[5px]">
+        <main className="m-0 w-full overflow-auto px-0 pt-1 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-0 md:pt-2">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
