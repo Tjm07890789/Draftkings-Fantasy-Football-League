@@ -461,8 +461,8 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
   );
-  const rankColWidth = "64px";
-  const nameColWidth = `${Math.max((longestNameChars + 4) * 8, 220)}px`;
+  const rankColWidth = "76px";
+  const nameColWidth = `${Math.max((longestNameChars + 8) * 9, 280)}px`;
   const dataColWidth = "68px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
@@ -626,7 +626,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             </TableRow>
             <TableRow className="h-4 py-0 text-[0.78rem]">
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-1 py-0 text-right text-[0.78rem]"
+                className="sticky top-0 z-20 h-4 bg-green-950/95 px-2 py-0 text-right text-[0.78rem]"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
                 #
@@ -635,7 +635,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="sticky top-0 z-20 h-4 bg-green-950/95 px-2 py-0 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer pl-2 text-left">
+                <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer pl-3 text-left">
                   Name{renderSortLabel("name")}
                 </button>
               </TableHead>
@@ -685,16 +685,16 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             {sortedRows.map((row, index) => (
               <TableRow key={row.name} className="h-4 py-0 text-[0.78rem]">
                 <TableCell
-                  className="h-4 px-1 py-0 text-right text-[0.78rem] font-semibold tabular-nums"
+                  className="h-4 px-2 py-0 text-right text-[0.78rem] font-semibold tabular-nums"
                   style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
                 >
                   {index + 1}
                 </TableCell>
                 <TableCell
-                  className="h-4 px-2 py-0 pl-4 text-[0.78rem] font-semibold"
+                  className="h-4 px-2 py-0 pl-6 text-[0.78rem] font-semibold whitespace-nowrap"
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
                 >
-                  <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{row.name}</span>
+                  {row.name}
                 </TableCell>
                 {row.weeks.map((score, index) => (
                   <TableCell
@@ -718,18 +718,16 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             ))}
             <TableRow className="h-4 bg-emerald-900/45 py-0 text-[0.78rem]">
               <TableCell
-                className="h-4 px-1 py-0 text-right text-[0.78rem] font-bold tabular-nums"
+                className="h-4 px-2 py-0 text-right text-[0.78rem] font-bold tabular-nums"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
                 -
               </TableCell>
               <TableCell
-                className="h-4 px-2 py-0 pl-4 text-[0.78rem] font-bold"
+                className="h-4 px-2 py-0 pl-6 text-[0.78rem] font-bold whitespace-nowrap"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                  {displayMode === "points" ? "Weekly Avg" : "Weekly Avg Rank"}
-                </span>
+                {displayMode === "points" ? "Weekly Avg" : "Weekly Avg Rank"}
               </TableCell>
               {(displayMode === "points" ? weeklyAverages : weeklyRankAverages).map((score, index) => (
                 <TableCell
