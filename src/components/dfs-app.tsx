@@ -461,8 +461,8 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
   );
-  const rankColWidth = "46px";
-  const nameColWidth = `${Math.max((longestNameChars + 2) * 8, 160)}px`;
+  const rankColWidth = "44px";
+  const nameColWidth = `${Math.max((longestNameChars + 2) * 8, 150)}px`;
   const dataColWidth = "68px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
@@ -565,8 +565,8 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
 
   const renderSortLabel = (column: SortColumn) => {
     const isActive = sortColumn === column;
-    if (!isActive) return "";
-    return sortDirection === "asc" ? " ↑" : " ↓";
+    if (!isActive) return " ↕";
+    return sortDirection === "asc" ? " ▲" : " ▼";
   };
 
   return (
@@ -624,15 +624,15 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 {title}
               </TableHead>
             </TableRow>
-            <TableRow className="h-4 py-0 text-[0.78rem]">
+            <TableRow className="h-7 py-0 text-[0.8rem]">
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-2 py-0 text-left text-[0.78rem]"
+                className="sticky top-0 z-20 h-7 bg-green-950/95 px-2 py-1 text-left text-[0.78rem]"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
                 <span className="pl-1">#</span>
               </TableHead>
               <TableHead
-                className="sticky top-0 z-20 h-4 border-r border-white/25 bg-green-950/95 px-2 py-0 text-[0.78rem]"
+                className="sticky top-0 z-20 h-7 border-r border-white/25 bg-green-950/95 px-2 py-1 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
                 <button
@@ -646,13 +646,13 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
               {Array.from({ length: 18 }, (_, index) => (
                 <TableHead
                   key={`week-head-${index + 1}`}
-                  className={`sticky top-0 z-20 h-4 bg-green-950/95 py-0 text-center text-[0.78rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
+                  className={`sticky top-0 z-20 h-7 bg-green-950/95 py-1 text-center text-[0.8rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
                   style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
                 >
                   <button
                     type="button"
                     onClick={() => handleSort(`week-${index}`)}
-                    className="w-full cursor-pointer text-center font-semibold text-green-100"
+                    className="w-full cursor-pointer text-center font-bold text-amber-300"
                   >
                     W{index + 1}
                     {renderSortLabel(`week-${index}`)}
@@ -660,37 +660,37 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </TableHead>
               ))}
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-[1px] py-0 text-center text-[0.78rem]"
+                className="sticky top-0 z-20 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
                   type="button"
                   onClick={() => handleSort("total")}
-                  className="w-full cursor-pointer text-center font-semibold text-green-100"
+                  className="w-full cursor-pointer text-center font-semibold text-amber-300"
                 >
                   Total{renderSortLabel("total")}
                 </button>
               </TableHead>
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-[1px] py-0 text-center text-[0.78rem]"
+                className="sticky top-0 z-20 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
                   type="button"
                   onClick={() => handleSort("avgWeekly")}
-                  className="w-full cursor-pointer text-center font-semibold text-green-100"
+                  className="w-full cursor-pointer text-center font-semibold text-amber-300"
                 >
                   Avg Weekly{renderSortLabel("avgWeekly")}
                 </button>
               </TableHead>
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-[1px] py-0 text-center text-[0.78rem]"
+                className="sticky top-0 z-20 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
                   type="button"
                   onClick={() => handleSort("top10Avg")}
-                  className="w-full cursor-pointer text-center font-semibold text-green-100"
+                  className="w-full cursor-pointer text-center font-semibold text-amber-300"
                 >
                   Top10 Avg{renderSortLabel("top10Avg")}
                 </button>
@@ -926,7 +926,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </nav>
         </aside>
 
-        <main className="m-0 w-full overflow-auto px-[5px] md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-center md:overflow-hidden md:px-[5px]">
+        <main className="m-0 w-full overflow-auto px-[5px] md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-[5px]">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
