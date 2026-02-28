@@ -791,10 +791,9 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
   const participantCount = view === "previous" ? previousRows.length : currentRows.length;
-  const leagueParticipantCount = currentRows.length;
   const duesPerParticipantRaw = Number.parseFloat(process.env.NEXT_PUBLIC_DUES_PER_PARTICIPANT ?? "0");
   const duesPerParticipant = Number.isFinite(duesPerParticipantRaw) && duesPerParticipantRaw > 0 ? duesPerParticipantRaw : 0;
-  const poolTotal = leagueParticipantCount * duesPerParticipant;
+  const poolTotal = participantCount * duesPerParticipant;
   const poolLabel =
     duesPerParticipant > 0
       ? `${formatCurrency(poolTotal)} pool (${formatCurrency(duesPerParticipant)} dues)`
