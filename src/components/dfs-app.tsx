@@ -530,7 +530,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         } as React.CSSProperties
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/20 px-3 py-2">
+      <div className="sticky top-20 z-30 flex flex-wrap items-center justify-between gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
         <h2 className="text-lg font-bold text-white">{title}</h2>
         <div className="flex items-center gap-2">
           <button
