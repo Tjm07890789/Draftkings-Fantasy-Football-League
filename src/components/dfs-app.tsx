@@ -461,8 +461,8 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
   );
-  const rankColWidth = "56px";
-  const nameColWidth = `${Math.max((longestNameChars + 3) * 9, 190)}px`;
+  const rankColWidth = "46px";
+  const nameColWidth = `${Math.max((longestNameChars + 2) * 8, 160)}px`;
   const dataColWidth = "68px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
@@ -635,7 +635,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="sticky top-0 z-20 h-4 border-r border-white/25 bg-green-950/95 px-2 py-0 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer pl-1 text-left">
+                <button
+                  type="button"
+                  onClick={() => handleSort("name")}
+                  className="w-full cursor-pointer pl-1 text-left font-semibold text-green-100"
+                >
                   Name{renderSortLabel("name")}
                 </button>
               </TableHead>
@@ -648,7 +652,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                   <button
                     type="button"
                     onClick={() => handleSort(`week-${index}`)}
-                    className="w-full cursor-pointer text-center"
+                    className="w-full cursor-pointer text-center font-semibold text-green-100"
                   >
                     W{index + 1}
                     {renderSortLabel(`week-${index}`)}
@@ -659,7 +663,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="sticky top-0 z-20 h-4 bg-green-950/95 px-[1px] py-0 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
-                <button type="button" onClick={() => handleSort("total")} className="w-full cursor-pointer text-center">
+                <button
+                  type="button"
+                  onClick={() => handleSort("total")}
+                  className="w-full cursor-pointer text-center font-semibold text-green-100"
+                >
                   Total{renderSortLabel("total")}
                 </button>
               </TableHead>
@@ -667,7 +675,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="sticky top-0 z-20 h-4 bg-green-950/95 px-[1px] py-0 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
-                <button type="button" onClick={() => handleSort("avgWeekly")} className="w-full cursor-pointer text-center">
+                <button
+                  type="button"
+                  onClick={() => handleSort("avgWeekly")}
+                  className="w-full cursor-pointer text-center font-semibold text-green-100"
+                >
                   Avg Weekly{renderSortLabel("avgWeekly")}
                 </button>
               </TableHead>
@@ -675,7 +687,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="sticky top-0 z-20 h-4 bg-green-950/95 px-[1px] py-0 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
-                <button type="button" onClick={() => handleSort("top10Avg")} className="w-full cursor-pointer text-center">
+                <button
+                  type="button"
+                  onClick={() => handleSort("top10Avg")}
+                  className="w-full cursor-pointer text-center font-semibold text-green-100"
+                >
                   Top10 Avg{renderSortLabel("top10Avg")}
                 </button>
               </TableHead>
@@ -688,10 +704,10 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                   className="h-4 px-2 py-0 text-left text-[0.78rem] font-semibold tabular-nums"
                   style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
                 >
-                  <span className="pl-2">{index + 1}</span>
+                  <span className="pl-1">{index + 1}</span>
                 </TableCell>
                 <TableCell
-                  className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-6 text-[0.78rem] font-semibold whitespace-nowrap"
+                  className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-2 text-[0.78rem] font-semibold whitespace-nowrap"
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
                   title={row.name}
                 >
@@ -722,7 +738,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="h-4 px-2 py-0 text-left text-[0.78rem] font-bold tabular-nums"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
-                <span className="pl-2">-</span>
+                <span className="pl-1">-</span>
               </TableCell>
               <TableCell
                 className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 text-[0.78rem] font-bold whitespace-nowrap"
