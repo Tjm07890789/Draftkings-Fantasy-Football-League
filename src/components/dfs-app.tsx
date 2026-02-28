@@ -47,6 +47,14 @@ function formatCell(value: number) {
   return value.toFixed(2);
 }
 
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 function getColumnLabel(column: SortColumn) {
   if (column.startsWith("week-")) {
     const week = Number.parseInt(column.replace("week-", ""), 10);
@@ -64,6 +72,385 @@ function getSortValue(row: SeasonRow, column: SortColumn): string | number {
   if (column === "top10Avg") return row.top10Avg;
   const weekIndex = Number.parseInt(column.replace("week-", ""), 10);
   return row.weeks[weekIndex] ?? 0;
+}
+
+function mean(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function stdDev(values: number[]) {
+  if (values.length < 2) return 0;
+  const avg = mean(values);
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function formatSigned(value: number) {
+  const rounded = Number.parseFloat(value.toFixed(2));
+  if (rounded > 0) return `+${rounded.toFixed(2)}`;
+  return rounded.toFixed(2);
+}
+
+function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
+  type StatsSubview = "insights" | "weekly-ranks";
+  type RankSortColumn = "name" | "avgRank" | `week-${number}`;
+  type RankSortDirection = "asc" | "desc";
+
+  const [statsSubview, setStatsSubview] = React.useState<StatsSubview>("insights");
+  const [rankSortColumn, setRankSortColumn] = React.useState<RankSortColumn>("avgRank");
+  const [rankSortDirection, setRankSortDirection] = React.useState<RankSortDirection>("asc");
+  const [jumpWeek, setJumpWeek] = React.useState<string>("avg");
+  const weeklyRankContainerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const playedWeekCount = React.useMemo(() => {
+    return rows.reduce((max, row) => {
+      const played = row.weeks.filter((score) => score > 0).length;
+      return Math.max(max, played);
+    }, 0);
+  }, [rows]);
+
+  const activeWeeks = React.useMemo(() => {
+    return Array.from({ length: playedWeekCount }, (_, index) => index);
+  }, [playedWeekCount]);
+
+  const weeklyMedians = React.useMemo(() => {
+    return activeWeeks.map((weekIndex) => {
+      const weekScores = rows
+        .map((row) => row.weeks[weekIndex] ?? 0)
+        .filter((score) => score > 0)
+        .sort((a, b) => a - b);
+      if (!weekScores.length) return 0;
+      const middle = Math.floor(weekScores.length / 2);
+      if (weekScores.length % 2 === 1) return weekScores[middle];
+      return (weekScores[middle - 1] + weekScores[middle]) / 2;
+    });
+  }, [activeWeeks, rows]);
+
+  const teamMetrics = React.useMemo(() => {
+    return rows.map((row) => {
+      const played = row.weeks.slice(0, playedWeekCount).filter((score) => score > 0);
+      const recentWindow = played.slice(-4);
+      const previousWindow = played.slice(-8, -4);
+      const recentAvg = mean(recentWindow);
+      const previousAvg = mean(previousWindow.length ? previousWindow : recentWindow);
+      const momentum = recentAvg - previousAvg;
+      const variability = stdDev(played);
+      const medianWins = played.reduce((wins, score, weekIndex) => {
+        return wins + (score > (weeklyMedians[weekIndex] ?? 0) ? 1 : 0);
+      }, 0);
+      const powerScore = row.avgWeekly * 0.55 + recentAvg * 0.3 + row.top10Avg * 0.15 - variability * 0.08;
+
+      return {
+        ...row,
+        recentAvg,
+        momentum,
+        variability,
+        medianWins,
+        projectedRecord: `${medianWins}-${Math.max(played.length - medianWins, 0)}`,
+        powerScore,
+        bestWeek: played.length ? Math.max(...played) : 0,
+      };
+    });
+  }, [playedWeekCount, rows, weeklyMedians]);
+
+  const trendRows = React.useMemo(
+    () => [...teamMetrics].sort((a, b) => b.recentAvg - a.recentAvg),
+    [teamMetrics],
+  );
+
+  const powerRows = React.useMemo(
+    () => [...teamMetrics].sort((a, b) => b.powerScore - a.powerScore),
+    [teamMetrics],
+  );
+
+  const totalRank = React.useMemo(() => {
+    const sorted = [...teamMetrics].sort((a, b) => b.total - a.total);
+    return new Map(sorted.map((row, index) => [row.name, index + 1]));
+  }, [teamMetrics]);
+
+  const medianWinsRank = React.useMemo(() => {
+    const sorted = [...teamMetrics].sort((a, b) => b.medianWins - a.medianWins);
+    return new Map(sorted.map((row, index) => [row.name, index + 1]));
+  }, [teamMetrics]);
+
+  const insightRows = React.useMemo(() => {
+    return [...teamMetrics]
+      .map((row) => {
+        const luckIndex = (totalRank.get(row.name) ?? 0) - (medianWinsRank.get(row.name) ?? 0);
+        return { ...row, luckIndex };
+      })
+      .sort((a, b) => a.luckIndex - b.luckIndex);
+  }, [medianWinsRank, teamMetrics, totalRank]);
+
+  const weeklyRankMaps = React.useMemo(() => {
+    return activeWeeks.map((weekIndex) => {
+      const weekRankMap = new Map<string, number>();
+      const ranked = rows
+        .map((row) => ({ name: row.name, score: row.weeks[weekIndex] ?? 0 }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return a.name.localeCompare(b.name);
+        });
+
+      ranked.forEach((entry, index) => {
+        weekRankMap.set(entry.name, index + 1);
+      });
+      return weekRankMap;
+    });
+  }, [activeWeeks, rows]);
+
+  const weeklyRankRows = React.useMemo(() => {
+    const baseRows = rows.map((row) => {
+      const weekRanks = activeWeeks.map((_, weekArrayIndex) => weeklyRankMaps[weekArrayIndex].get(row.name) ?? null);
+      const playedRanks = weekRanks.filter((rank): rank is number => rank !== null);
+      return {
+        name: row.name,
+        weekRanks,
+        avgRank: playedRanks.length ? mean(playedRanks) : 0,
+      };
+    });
+
+    return [...baseRows].sort((a, b) => {
+      const direction = rankSortDirection === "asc" ? 1 : -1;
+      if (rankSortColumn === "name") return a.name.localeCompare(b.name) * direction;
+      if (rankSortColumn === "avgRank") return (a.avgRank - b.avgRank) * direction;
+
+      const weekIndex = Number.parseInt(rankSortColumn.replace("week-", ""), 10);
+      const aRank = a.weekRanks[weekIndex] ?? 999;
+      const bRank = b.weekRanks[weekIndex] ?? 999;
+      return (aRank - bRank) * direction;
+    });
+  }, [activeWeeks, rankSortColumn, rankSortDirection, rows, weeklyRankMaps]);
+
+  const handleRankSort = (column: RankSortColumn) => {
+    if (column === rankSortColumn) {
+      setRankSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setRankSortColumn(column);
+    setRankSortDirection(column === "name" ? "asc" : "asc");
+  };
+
+  const rankSortLabel = (column: RankSortColumn) => {
+    if (column !== rankSortColumn) return "";
+    return rankSortDirection === "asc" ? " ↑" : " ↓";
+  };
+
+  const scrollWeeklyRanksTo = (target: string) => {
+    const container = weeklyRankContainerRef.current;
+    if (!container) return;
+    if (target === "team") {
+      container.scrollTo({ left: 0, behavior: "smooth" });
+      return;
+    }
+    if (target === "avg") {
+      container.scrollTo({ left: container.scrollWidth, behavior: "smooth" });
+      return;
+    }
+    const targetWeek = Number.parseInt(target, 10);
+    if (!Number.isFinite(targetWeek) || targetWeek < 1) return;
+    const col = container.querySelector<HTMLElement>(`#rank-col-w${targetWeek}`);
+    if (!col) return;
+    const leftPadding = 120;
+    container.scrollTo({ left: Math.max(col.offsetLeft - leftPadding, 0), behavior: "smooth" });
+  };
+
+  if (!rows.length) {
+    return (
+      <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center">
+        <h2 className="text-3xl font-extrabold tracking-wide text-white">Statistics</h2>
+        <p className="mt-3 text-lg text-green-100">No season data available yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="w-full space-y-4 rounded-xl border border-white/30 bg-green-950/65 p-4 shadow-xl shadow-black/25 md:max-h-[calc(100vh-7rem)] md:overflow-auto">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-wide text-white">Statistics</h2>
+          <p className="text-sm text-green-100">
+            {seasonLabel} | through week {playedWeekCount}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setStatsSubview("insights")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${statsSubview === "insights" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Insights
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatsSubview("weekly-ranks")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${statsSubview === "weekly-ranks" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Weekly Rank Grid
+          </button>
+        </div>
+      </div>
+
+      {statsSubview === "insights" && (
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
+        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Team Trends</h3>
+          <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/20 text-left text-green-100">
+                  <th className="py-1">Team</th>
+                  <th className="py-1 text-right">Recent 4</th>
+                  <th className="py-1 text-right">Momentum</th>
+                  <th className="py-1 text-right">Best Wk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trendRows.map((row) => (
+                  <tr key={`trend-${row.name}`} className="border-b border-white/10">
+                    <td className="py-1 font-semibold">{row.name}</td>
+                    <td className="py-1 text-right">{formatCell(row.recentAvg)}</td>
+                    <td className={`py-1 text-right ${row.momentum >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                      {formatSigned(row.momentum)}
+                    </td>
+                    <td className="py-1 text-right">{formatCell(row.bestWeek)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Power Rankings</h3>
+          <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/20 text-left text-green-100">
+                  <th className="w-10 py-1 text-right tabular-nums">#</th>
+                  <th className="py-1 pl-3">Team</th>
+                  <th className="py-1 text-right">Power</th>
+                  <th className="py-1 text-right">Variance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {powerRows.map((row, index) => (
+                  <tr key={`power-${row.name}`} className="border-b border-white/10">
+                    <td className="w-10 py-1 pr-1 text-right font-semibold tabular-nums">{index + 1}</td>
+                    <td className="py-1 pl-3 font-semibold">{row.name}</td>
+                    <td className="py-1 text-right">{formatCell(row.powerScore)}</td>
+                    <td className="py-1 text-right">{formatCell(row.variability)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Matchup Insights</h3>
+          <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/20 text-left text-green-100">
+                  <th className="py-1">Team</th>
+                  <th className="py-1 text-right">Vs Median</th>
+                  <th className="py-1 text-right">Luck Index</th>
+                </tr>
+              </thead>
+              <tbody>
+                {insightRows.map((row) => (
+                  <tr key={`insight-${row.name}`} className="border-b border-white/10">
+                    <td className="py-1 font-semibold">{row.name}</td>
+                    <td className="py-1 text-right">{row.projectedRecord}</td>
+                    <td className={`py-1 text-right ${row.luckIndex <= 0 ? "text-emerald-300" : "text-amber-200"}`}>
+                      {formatSigned(row.luckIndex)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+      )}
+
+      {statsSubview === "weekly-ranks" && (
+        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-green-100">Weekly Rank Grid</h3>
+            <div className="flex items-center gap-2">
+              <label htmlFor="jump-week" className="text-[11px] font-semibold uppercase tracking-wide text-green-100">
+                Jump to
+              </label>
+              <select
+                id="jump-week"
+                value={jumpWeek}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setJumpWeek(next);
+                  scrollWeeklyRanksTo(next);
+                }}
+                className="rounded-md border border-white/25 bg-green-950/90 px-2 py-1 text-xs text-green-100"
+              >
+                <option value="team">Team</option>
+                {activeWeeks.map((weekIndex) => (
+                  <option key={`jump-week-${weekIndex + 1}`} value={String(weekIndex + 1)}>
+                    Week {weekIndex + 1}
+                  </option>
+                ))}
+                <option value="avg">Avg Rank</option>
+              </select>
+            </div>
+          </div>
+          <div ref={weeklyRankContainerRef} className="max-h-[62vh] overflow-auto">
+            <table className="w-full min-w-[980px] text-xs">
+              <thead>
+                <tr className="border-b border-white/20 text-left text-green-100">
+                  <th className="sticky top-0 bg-green-950/95 py-1">
+                    <button type="button" className="w-full text-left" onClick={() => handleRankSort("name")}>
+                      Team{rankSortLabel("name")}
+                    </button>
+                  </th>
+                  {activeWeeks.map((weekIndex) => (
+                    <th
+                      id={`rank-col-w${weekIndex + 1}`}
+                      key={`rank-head-${weekIndex + 1}`}
+                      className="sticky top-0 bg-green-950/95 py-1 text-right tabular-nums"
+                    >
+                      <button type="button" className="w-full text-right" onClick={() => handleRankSort(`week-${weekIndex}`)}>
+                        W{weekIndex + 1}{rankSortLabel(`week-${weekIndex}`)}
+                      </button>
+                    </th>
+                  ))}
+                  <th className="sticky top-0 bg-green-950/95 py-1 text-right">
+                    <button type="button" className="w-full text-right" onClick={() => handleRankSort("avgRank")}>
+                      Avg Rank{rankSortLabel("avgRank")}
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeklyRankRows.map((row) => (
+                  <tr key={`rank-row-${row.name}`} className="border-b border-white/10">
+                    <td className="py-1 font-semibold">{row.name}</td>
+                    {row.weekRanks.map((rank, index) => (
+                      <td key={`rank-${row.name}-${index + 1}`} className="py-1 text-right tabular-nums">
+                        {rank ?? "-"}
+                      </td>
+                    ))}
+                    <td className="py-1 text-right font-semibold tabular-nums">{formatCell(row.avgRank)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      )}
+    </section>
+  );
 }
 
 function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
@@ -289,6 +676,15 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
   const participantCount =
     view === "previous" ? previousRows.length : currentRows.length;
+  const leagueParticipantCount = currentRows.length;
+  const duesPerParticipantRaw = Number.parseFloat(process.env.NEXT_PUBLIC_DUES_PER_PARTICIPANT ?? "0");
+  const duesPerParticipant = Number.isFinite(duesPerParticipantRaw) && duesPerParticipantRaw > 0 ? duesPerParticipantRaw : 0;
+  const poolTotal = leagueParticipantCount * duesPerParticipant;
+  const poolLabel =
+    duesPerParticipant > 0
+      ? `${formatCurrency(poolTotal)} pool (${formatCurrency(duesPerParticipant)} dues)`
+      : "Pool TBD (set NEXT_PUBLIC_DUES_PER_PARTICIPANT)";
+  const inStatsView = view === "statistics";
 
   React.useEffect(() => {
     const savedView = getCookie(NAV_COOKIE);
@@ -315,24 +711,80 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
   return (
     <div className="gridiron-bg m-0 h-screen overflow-auto p-0 text-white md:overflow-hidden">
-      <header className="fixed top-0 right-0 left-0 z-40 flex h-20 w-full items-center justify-between border-b border-white/25 bg-green-950/80 px-6 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="fixed top-0 right-0 left-0 z-40 flex h-20 w-full items-center justify-between gap-4 border-b border-white/25 bg-green-950/85 px-4 backdrop-blur-sm md:px-6">
+        <div className="flex min-w-0 items-center gap-3 md:gap-4">
           <Image
             src="https://upload.wikimedia.org/wikipedia/en/a/a2/National_Football_League_logo.svg"
             alt="NFL logo"
-            width={48}
-            height={59}
-            className="h-12 w-auto"
+            width={44}
+            height={54}
+            className="h-10 w-auto md:h-12"
           />
-          <h1 className="text-2xl font-bold tracking-wide">DFS Football League</h1>
+          <h1 className="truncate text-lg font-bold tracking-wide md:text-2xl">DFS Football League</h1>
         </div>
-        <div className="text-sm font-semibold text-green-100">
-          2025 | {participantCount} participants | $10k pool
+
+        <nav className="hidden items-center gap-2 lg:flex">
+          <button
+            type="button"
+            onClick={() => setView("current")}
+            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20"
+          >
+            Current Weekly Grid
+          </button>
+
+          <details className="group relative">
+            <summary className="cursor-pointer list-none rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20 [&::-webkit-details-marker]:hidden">
+              Yearly Scoring Grids
+            </summary>
+            <div className="absolute top-full left-0 mt-2 min-w-56 rounded-md border border-white/20 bg-green-950/95 p-2 shadow-xl">
+              {data.currentSeasonYear && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    setView("current");
+                    const parent = event.currentTarget.closest("details");
+                    if (parent) parent.removeAttribute("open");
+                  }}
+                  className="block w-full rounded px-3 py-2 text-left text-sm text-green-100 transition hover:bg-white/15"
+                >
+                  {data.currentSeasonYear} (Current)
+                </button>
+              )}
+              {data.previousYears.map((year) => (
+                <button
+                  key={year}
+                  type="button"
+                  onClick={(event) => {
+                    setSelectedYear(year);
+                    setView("previous");
+                    const parent = event.currentTarget.closest("details");
+                    if (parent) parent.removeAttribute("open");
+                  }}
+                  className="block w-full rounded px-3 py-2 text-left text-sm text-green-100 transition hover:bg-white/15"
+                >
+                  {year}
+                </button>
+              ))}
+            </div>
+          </details>
+
+          <button
+            type="button"
+            onClick={() => setView("statistics")}
+            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20"
+          >
+            Statistics
+          </button>
+        </nav>
+
+        <div className="text-right text-xs font-semibold text-green-100 md:text-sm">
+          <div>{data.currentSeasonYear ?? "Season"} | {participantCount} participants</div>
+          <div>{poolLabel}</div>
         </div>
       </header>
 
-      <div className="relative m-0 p-0 pt-20 md:flex md:h-[calc(100vh-5rem)] md:overflow-hidden">
-        <aside className="top-20 left-0 w-full border-b border-white/25 bg-green-950/60 px-[5px] py-4 md:fixed md:h-[calc(100vh-5rem)] md:w-[9.5%] md:border-r md:border-b-0">
+      <div className="relative m-0 p-0 pt-20 md:h-[calc(100vh-5rem)]">
+        <aside className="w-full border-b border-white/25 bg-green-950/60 px-3 py-3 lg:hidden">
           <nav className="space-y-5">
             <button
               type="button"
@@ -376,7 +828,9 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </nav>
         </aside>
 
-        <main className="m-0 w-full overflow-auto px-[5px] md:ml-[9.5%] md:flex md:h-[calc(100vh-5rem)] md:w-[90.5%] md:items-center md:justify-center md:overflow-hidden md:px-[5px]">
+        <main
+          className={`m-0 w-full overflow-auto px-[5px] md:flex md:h-[calc(100vh-5rem)] md:w-full md:justify-center md:px-[5px] ${inStatsView ? "md:items-start md:overflow-auto" : "md:items-center md:overflow-hidden"}`}
+        >
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
@@ -391,10 +845,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           )}
 
           {view === "statistics" && (
-            <div className="text-center">
-              <h2 className="text-4xl font-extrabold tracking-wide text-white">Statistics</h2>
-              <p className="mt-3 text-lg text-green-100">Coming Soon</p>
-            </div>
+            <StatisticsView rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Season"} />
           )}
         </main>
       </div>
