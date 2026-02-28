@@ -455,6 +455,7 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
 
 function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonRow[]; seasonLabel: string }) {
   type SeasonPanel = "grid" | "statistics";
+  type DisplayMode = "points" | "rank";
   const totalGridColumns = 23;
   const longestNameChars = React.useMemo(
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
@@ -467,10 +468,40 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const [seasonPanel, setSeasonPanel] = React.useState<SeasonPanel>("grid");
+  const [displayMode, setDisplayMode] = React.useState<DisplayMode>("points");
+
+  const weekRanksByName = React.useMemo(() => {
+    const map = new Map<string, (number | null)[]>();
+    rows.forEach((row) => map.set(row.name, Array.from({ length: 18 }, () => null)));
+
+    for (let weekIndex = 0; weekIndex < 18; weekIndex += 1) {
+      const ranked = rows
+        .map((row) => ({ name: row.name, score: row.weeks[weekIndex] ?? 0 }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return a.name.localeCompare(b.name);
+        });
+
+      ranked.forEach((entry, rankIndex) => {
+        const target = map.get(entry.name);
+        if (target) target[weekIndex] = rankIndex + 1;
+      });
+    }
+
+    return map;
+  }, [rows]);
 
   const sortedRows = React.useMemo(() => {
     const nextRows = [...rows];
     nextRows.sort((a, b) => {
+      if (sortColumn.startsWith("week-") && displayMode === "rank") {
+        const weekIndex = Number.parseInt(sortColumn.replace("week-", ""), 10);
+        const aRank = weekRanksByName.get(a.name)?.[weekIndex] ?? 999;
+        const bRank = weekRanksByName.get(b.name)?.[weekIndex] ?? 999;
+        const numeric = aRank - bRank;
+        return sortDirection === "asc" ? numeric : numeric * -1;
+      }
       const aValue = getSortValue(a, sortColumn);
       const bValue = getSortValue(b, sortColumn);
       if (typeof aValue === "string" && typeof bValue === "string") {
@@ -481,7 +512,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       return sortDirection === "asc" ? numeric : numeric * -1;
     });
     return nextRows;
-  }, [rows, sortColumn, sortDirection]);
+  }, [displayMode, rows, sortColumn, sortDirection, weekRanksByName]);
 
   const weeklyAverages = React.useMemo(() => {
     if (!rows.length) return Array.from({ length: 18 }, () => 0);
@@ -490,6 +521,15 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       return total / rows.length;
     });
   }, [rows]);
+
+  const weeklyRankAverages = React.useMemo(() => {
+    return Array.from({ length: 18 }, (_, weekIndex) => {
+      const ranks = rows
+        .map((row) => weekRanksByName.get(row.name)?.[weekIndex] ?? null)
+        .filter((value): value is number => value !== null);
+      return ranks.length ? mean(ranks) : 0;
+    });
+  }, [rows, weekRanksByName]);
 
   const averageTotal = React.useMemo(() => {
     if (!rows.length) return 0;
@@ -512,7 +552,15 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       return;
     }
     setSortColumn(column);
-    setSortDirection(column === "name" ? "asc" : "desc");
+    if (column === "name") {
+      setSortDirection("asc");
+      return;
+    }
+    if (column.startsWith("week-") && displayMode === "rank") {
+      setSortDirection("asc");
+      return;
+    }
+    setSortDirection("desc");
   };
 
   const renderSortLabel = (column: SortColumn) => {
@@ -547,6 +595,22 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
           >
             Statistics
           </button>
+          <div className="ml-2 flex items-center gap-1 rounded-md border border-white/25 bg-black/20 p-1">
+            <button
+              type="button"
+              onClick={() => setDisplayMode("points")}
+              className={`rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${displayMode === "points" ? "bg-emerald-400/20 text-emerald-100" : "text-green-100 hover:bg-white/15"}`}
+            >
+              Total Points
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayMode("rank")}
+              className={`rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${displayMode === "rank" ? "bg-emerald-400/20 text-emerald-100" : "text-green-100 hover:bg-white/15"}`}
+            >
+              Week Rank
+            </button>
+          </div>
           <span className="ml-1 text-sm font-semibold text-green-100">{rows.length} participants</span>
         </div>
       </div>
@@ -637,7 +701,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                     className={`${row.top10WeekIndexes.includes(index) ? "bg-emerald-300/35 text-emerald-50 font-bold shadow-[inset_0_0_0_1px_rgba(16,185,129,0.55)] " : ""}h-4 py-0 text-center text-[0.78rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
                     style={{ width: dataColWidth, minWidth: dataColWidth }}
                   >
-                    {formatCell(score)}
+                    {displayMode === "points" ? formatCell(score) : (weekRanksByName.get(row.name)?.[index] ?? "-")}
                   </TableCell>
                 ))}
                 <TableCell className="h-4 px-[1px] py-0 text-center text-[0.78rem] font-semibold" style={{ width: dataColWidth, minWidth: dataColWidth }}>
@@ -662,9 +726,9 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 className="h-4 px-1 py-0 text-[0.78rem] font-bold whitespace-nowrap"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                Weekly Avg
+                {displayMode === "points" ? "Weekly Avg" : "Weekly Avg Rank"}
               </TableCell>
-              {weeklyAverages.map((score, index) => (
+              {(displayMode === "points" ? weeklyAverages : weeklyRankAverages).map((score, index) => (
                 <TableCell
                   key={`weekly-average-${index + 1}`}
                   className={`h-4 py-0 text-center text-[0.78rem] font-semibold ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
