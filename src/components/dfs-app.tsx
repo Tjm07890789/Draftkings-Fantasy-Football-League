@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type View = "welcome" | "current" | "previous" | "statistics";
+type View = "welcome" | "current" | "previous";
 
 type SeasonRow = {
   name: string;
@@ -453,7 +453,8 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
   );
 }
 
-function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
+function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonRow[]; seasonLabel: string }) {
+  type SeasonPanel = "grid" | "statistics";
   const longestNameChars = React.useMemo(
     () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
     [rows],
@@ -464,6 +465,7 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
+  const [seasonPanel, setSeasonPanel] = React.useState<SeasonPanel>("grid");
 
   const sortedRows = React.useMemo(() => {
     const nextRows = [...rows];
@@ -528,11 +530,28 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
         } as React.CSSProperties
       }
     >
-      <h2 className="flex items-center justify-between px-3 py-2 text-lg font-bold text-white">
-        <span>{title}</span>
-        <span className="text-sm font-semibold text-green-100">{rows.length} participants</span>
-      </h2>
-      <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3rem)] md:overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/20 px-3 py-2">
+        <h2 className="text-lg font-bold text-white">{title}</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSeasonPanel("grid")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${seasonPanel === "grid" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            onClick={() => setSeasonPanel("statistics")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${seasonPanel === "statistics" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Statistics
+          </button>
+          <span className="ml-1 text-sm font-semibold text-green-100">{rows.length} participants</span>
+        </div>
+      </div>
+      {seasonPanel === "grid" && (
+      <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3.5rem)] md:overflow-hidden">
         <Table className="table-fixed w-full max-w-full overflow-hidden text-[0.78rem]">
           <TableHeader>
             <TableRow className="h-4 py-0 text-[0.78rem]">
@@ -662,9 +681,17 @@ function SeasonGrid({ title, rows }: { title: string; rows: SeasonRow[] }) {
           </TableBody>
         </Table>
       </div>
-      <div className="px-3 pb-2 text-[0.6rem] text-green-100/80">
-        Sorted by {getColumnLabel(sortColumn)} ({sortDirection})
-      </div>
+      )}
+      {seasonPanel === "grid" && (
+        <div className="px-3 pb-2 text-[0.6rem] text-green-100/80">
+          Sorted by {getColumnLabel(sortColumn)} ({sortDirection})
+        </div>
+      )}
+      {seasonPanel === "statistics" && (
+        <div className="p-3">
+          <StatisticsView rows={rows} seasonLabel={seasonLabel} />
+        </div>
+      )}
     </section>
   );
 }
@@ -674,8 +701,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
-  const participantCount =
-    view === "previous" ? previousRows.length : currentRows.length;
+  const participantCount = view === "previous" ? previousRows.length : currentRows.length;
   const leagueParticipantCount = currentRows.length;
   const duesPerParticipantRaw = Number.parseFloat(process.env.NEXT_PUBLIC_DUES_PER_PARTICIPANT ?? "0");
   const duesPerParticipant = Number.isFinite(duesPerParticipantRaw) && duesPerParticipantRaw > 0 ? duesPerParticipantRaw : 0;
@@ -684,13 +710,11 @@ export function DFSApp({ data }: { data: LeagueData }) {
     duesPerParticipant > 0
       ? `${formatCurrency(poolTotal)} pool (${formatCurrency(duesPerParticipant)} dues)`
       : "Pool TBD (set NEXT_PUBLIC_DUES_PER_PARTICIPANT)";
-  const inStatsView = view === "statistics";
-
   React.useEffect(() => {
     const savedView = getCookie(NAV_COOKIE);
     const savedSeason = getCookie(SEASON_COOKIE);
 
-    if (savedView === "current" || savedView === "previous" || savedView === "statistics") {
+    if (savedView === "current" || savedView === "previous") {
       setView(savedView);
     }
 
@@ -729,12 +753,12 @@ export function DFSApp({ data }: { data: LeagueData }) {
             onClick={() => setView("current")}
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20"
           >
-            Current Weekly Grid
+            Current Year
           </button>
 
           <details className="group relative">
             <summary className="cursor-pointer list-none rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20 [&::-webkit-details-marker]:hidden">
-              Yearly Scoring Grids
+              Previous Years
             </summary>
             <div className="absolute top-full left-0 mt-2 min-w-56 rounded-md border border-white/20 bg-green-950/95 p-2 shadow-xl">
               {data.currentSeasonYear && (
@@ -767,14 +791,6 @@ export function DFSApp({ data }: { data: LeagueData }) {
               ))}
             </div>
           </details>
-
-          <button
-            type="button"
-            onClick={() => setView("statistics")}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20"
-          >
-            Statistics
-          </button>
         </nav>
 
         <div className="text-right text-xs font-semibold text-green-100 md:text-sm">
@@ -791,7 +807,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
               onClick={() => setView("current")}
               className="w-full rounded-md bg-white/10 px-3 py-2 text-left text-sm font-semibold text-green-50 transition hover:bg-white/20"
             >
-              Current Weekly Season Grid
+              Current Year
             </button>
 
             <section>
@@ -818,19 +834,10 @@ export function DFSApp({ data }: { data: LeagueData }) {
               </Accordion>
             </section>
 
-            <button
-              type="button"
-              onClick={() => setView("statistics")}
-              className="w-full rounded-md bg-white/10 px-3 py-2 text-left text-sm font-semibold text-green-50 transition hover:bg-white/20"
-            >
-              Statistics
-            </button>
           </nav>
         </aside>
 
-        <main
-          className={`m-0 w-full overflow-auto px-[5px] md:flex md:h-[calc(100vh-5rem)] md:w-full md:justify-center md:px-[5px] ${inStatsView ? "md:items-start md:overflow-auto" : "md:items-center md:overflow-hidden"}`}
-        >
+        <main className="m-0 w-full overflow-auto px-[5px] md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-center md:overflow-hidden md:px-[5px]">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
@@ -838,14 +845,20 @@ export function DFSApp({ data }: { data: LeagueData }) {
             </div>
           )}
 
-          {view === "current" && <SeasonGrid title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`} rows={currentRows} />}
-
-          {view === "previous" && selectedYear && (
-            <SeasonGrid title={`Previous Season Grid (${selectedYear})`} rows={previousRows} />
+          {view === "current" && (
+            <SeasonGrid
+              title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
+              rows={currentRows}
+              seasonLabel={data.currentSeasonYear ?? "Current Season"}
+            />
           )}
 
-          {view === "statistics" && (
-            <StatisticsView rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Season"} />
+          {view === "previous" && selectedYear && (
+            <SeasonGrid
+              title={`Previous Season Grid (${selectedYear})`}
+              rows={previousRows}
+              seasonLabel={selectedYear}
+            />
           )}
         </main>
       </div>
