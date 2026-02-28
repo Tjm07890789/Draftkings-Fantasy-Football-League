@@ -632,7 +632,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 #
               </TableHead>
               <TableHead
-                className="sticky top-0 z-20 h-4 bg-green-950/95 px-2 py-0 text-[0.78rem]"
+                className="sticky top-0 z-20 h-4 border-r border-white/25 bg-green-950/95 px-2 py-0 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
                 <button type="button" onClick={() => handleSort("name")} className="w-full cursor-pointer pl-3 text-left">
@@ -691,10 +691,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                   {index + 1}
                 </TableCell>
                 <TableCell
-                  className="h-4 px-2 py-0 pl-6 text-[0.78rem] font-semibold whitespace-nowrap"
+                  className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-6 text-[0.78rem] font-semibold whitespace-nowrap"
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
+                  title={row.name}
                 >
-                  {row.name}
+                  <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{row.name}</span>
                 </TableCell>
                 {row.weeks.map((score, index) => (
                   <TableCell
@@ -724,10 +725,12 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 -
               </TableCell>
               <TableCell
-                className="h-4 px-2 py-0 pl-6 text-[0.78rem] font-bold whitespace-nowrap"
+                className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-6 text-[0.78rem] font-bold whitespace-nowrap"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
-                {displayMode === "points" ? "Weekly Avg" : "Weekly Avg Rank"}
+                <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                  {displayMode === "points" ? "Weekly Avg" : "Weekly Avg Rank"}
+                </span>
               </TableCell>
               {(displayMode === "points" ? weeklyAverages : weeklyRankAverages).map((score, index) => (
                 <TableCell
