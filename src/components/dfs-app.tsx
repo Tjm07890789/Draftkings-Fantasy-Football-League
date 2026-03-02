@@ -26,6 +26,10 @@ type LeagueData = {
 
 type SortDirection = "asc" | "desc";
 type SortColumn = "name" | "total" | "avgWeekly" | "top10Avg" | `week-${number}`;
+type LayoutPreference = "auto" | "mobile" | "desktop";
+type MobileTab = "home" | "stats" | "standings" | "more";
+
+const LAYOUT_PREF_KEY = "dfs_v1_layout_pref";
 
 const NAV_COOKIE = "dfs_v1_last_nav";
 const SEASON_COOKIE = "dfs_v1_last_season";
@@ -788,6 +792,32 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
 export function DFSApp({ data }: { data: LeagueData }) {
   const [view, setView] = React.useState<View>("welcome");
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
+  
+  // Mobile/Desktop layout state
+  const [layoutPreference, setLayoutPreference] = React.useState<LayoutPreference>("auto");
+  const [isDesktopByViewport, setIsDesktopByViewport] = React.useState(true);
+  const [mobileTab, setMobileTab] = React.useState<MobileTab>("home");
+
+  // Detect viewport size and load saved preference
+  React.useEffect(() => {
+    const saved = window.localStorage.getItem(LAYOUT_PREF_KEY);
+    if (saved === "mobile" || saved === "desktop" || saved === "auto") {
+      setLayoutPreference(saved);
+    }
+    
+    const sync = () => setIsDesktopByViewport(window.innerWidth >= 1024);
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, []);
+
+  React.useEffect(() => {
+    window.localStorage.setItem(LAYOUT_PREF_KEY, layoutPreference);
+  }, [layoutPreference]);
+
+  const isDesktopView = layoutPreference === "desktop" || (layoutPreference === "auto" && isDesktopByViewport);
+  const isMobileView = !isDesktopView;
+
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
   const participantCount = view === "previous" ? previousRows.length : currentRows.length;
@@ -881,6 +911,16 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </details>
         </nav>
 
+        {/* Mobile/Desktop Toggle Button */}
+        <button
+          type="button"
+          onClick={() => setLayoutPreference(isDesktopView ? "mobile" : "desktop")}
+          className="rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-green-50 hover:bg-white/20 md:block"
+          title={isDesktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
+        >
+          {isDesktopView ? "📱 Mobile" : "💻 Desktop"}
+        </button>
+
         <div className="text-right text-xs font-semibold text-green-100 md:text-sm">
           <div>{data.currentSeasonYear ?? "Season"} | {participantCount} participants</div>
           <div>{poolLabel}</div>
@@ -925,7 +965,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </nav>
         </aside>
 
-        <main className="m-0 w-full overflow-auto px-0 pt-1 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-0 md:pt-2">
+        <main className="m-0 w-full overflow-auto px-0 pt-1 pb-20 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-0 md:pt-2 md:pb-0">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
@@ -949,6 +989,44 @@ export function DFSApp({ data }: { data: LeagueData }) {
             />
           )}
         </main>
+
+        {/* Mobile Bottom Tab Bar */}
+        {isMobileView && (
+          <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-white/25 bg-green-950/95 px-2 shadow-lg">
+            <button
+              type="button"
+              onClick={() => { setMobileTab("home"); setView("current"); }}
+              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "home" ? "text-green-400" : "text-green-100"}`}
+            >
+              <span className="text-lg">🏠</span>
+              <span className="text-xs font-semibold">Home</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMobileTab("stats"); setView("current"); }}
+              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "stats" ? "text-green-400" : "text-green-100"}`}
+            >
+              <span className="text-lg">📊</span>
+              <span className="text-xs font-semibold">Stats</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMobileTab("standings"); setView("current"); }}
+              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "standings" ? "text-green-400" : "text-green-100"}`}
+            >
+              <span className="text-lg">🏆</span>
+              <span className="text-xs font-semibold">Standings</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMobileTab("more"); setView("previous"); }}
+              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "more" ? "text-green-400" : "text-green-100"}`}
+            >
+              <span className="text-lg">📋</span>
+              <span className="text-xs font-semibold">More</span>
+            </button>
+          </nav>
+        )}
       </div>
     </div>
   );
