@@ -911,15 +911,31 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </details>
         </nav>
 
-        {/* Mobile/Desktop Toggle Button */}
-        <button
-          type="button"
-          onClick={() => setLayoutPreference(isDesktopView ? "mobile" : "desktop")}
-          className="rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-green-50 hover:bg-white/20 md:block"
-          title={isDesktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-        >
-          {isDesktopView ? "📱 Mobile" : "💻 Desktop"}
-        </button>
+        {/* Mobile/Desktop Toggle Buttons */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setLayoutPreference("mobile")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+              isMobileView 
+                ? "border-green-400 bg-green-600 text-white" 
+                : "border-white/25 bg-white/10 text-green-50 hover:bg-white/20"
+            }`}
+          >
+            📱 Mobile
+          </button>
+          <button
+            type="button"
+            onClick={() => setLayoutPreference("desktop")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+              isDesktopView 
+                ? "border-green-400 bg-green-600 text-white" 
+                : "border-white/25 bg-white/10 text-green-50 hover:bg-white/20"
+            }`}
+          >
+            💻 Desktop
+          </button>
+        </div>
 
         <div className="text-right text-xs font-semibold text-green-100 md:text-sm">
           <div>{data.currentSeasonYear ?? "Season"} | {participantCount} participants</div>
