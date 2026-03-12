@@ -992,6 +992,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </nav>
         </aside>
 
+        {/* Desktop-only main content - hidden on mobile */}
+        {!isMobileView && (
         <main className="m-0 w-full overflow-auto px-0 pt-1 pb-20 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-0 md:pt-2 md:pb-0">
           {view === "welcome" && (
             <div className="text-center">
@@ -1016,6 +1018,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
             />
           )}
         </main>
+        )}
 
         {/* Mobile Tab Content */}
         {isMobileView && (
