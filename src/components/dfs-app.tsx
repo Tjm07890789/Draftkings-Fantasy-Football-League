@@ -803,27 +803,30 @@ export function DFSApp({ data }: { data: LeagueData }) {
   
   // Mobile/Desktop layout state
   const [layoutPreference, setLayoutPreference] = React.useState<LayoutPreference>("auto");
-  const [isDesktopByViewport, setIsDesktopByViewport] = React.useState(true);
+  const [isDesktopByViewport, setIsDesktopByViewport] = React.useState<boolean | undefined>(undefined);
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("home");
+  const [mounted, setMounted] = React.useState(false);
 
   // Detect viewport size and load saved preference
   React.useEffect(() => {
+    setMounted(true);
     const saved = window.localStorage.getItem(LAYOUT_PREF_KEY);
     if (saved === "mobile" || saved === "desktop" || saved === "auto") {
       setLayoutPreference(saved);
     }
     
-    const sync = () => setIsDesktopByViewport(window.innerWidth >= 1024);
-    sync();
-    window.addEventListener("resize", sync);
-    return () => window.removeEventListener("resize", sync);
+    const checkViewport = () => setIsDesktopByViewport(window.innerWidth >= 1024);
+    checkViewport();
+    window.addEventListener("resize", checkViewport);
+    return () => window.removeEventListener("resize", checkViewport);
   }, []);
 
   React.useEffect(() => {
     window.localStorage.setItem(LAYOUT_PREF_KEY, layoutPreference);
   }, [layoutPreference]);
 
-  const isDesktopView = layoutPreference === "desktop" || (layoutPreference === "auto" && isDesktopByViewport);
+  // Only show desktop view after mount and when explicitly desktop
+  const isDesktopView = mounted && (layoutPreference === "desktop" || (layoutPreference === "auto" && isDesktopByViewport === true));
   const isMobileView = !isDesktopView;
 
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
