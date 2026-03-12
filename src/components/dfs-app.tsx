@@ -521,8 +521,16 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   const weeklyAverages = React.useMemo(() => {
     if (!rows.length) return Array.from({ length: 18 }, () => 0);
     return Array.from({ length: 18 }, (_, index) => {
-      const total = rows.reduce((sum, row) => sum + (row.weeks[index] ?? 0), 0);
-      return total / rows.length;
+      // Get non-zero scores for this week
+      const nonZeroScores = rows
+        .map((row) => row.weeks[index] ?? 0)
+        .filter((score) => score !== 0);
+      
+      // Only calculate average if there's at least one non-zero entry
+      if (nonZeroScores.length === 0) return 0;
+      
+      const total = nonZeroScores.reduce((sum, score) => sum + score, 0);
+      return total / nonZeroScores.length;
     });
   }, [rows]);
 
@@ -620,7 +628,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         </div>
       </div>
       {seasonPanel === "grid" && (
-      <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3.5rem)] md:overflow-hidden">
+      <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3.5rem)] md:overflow-auto">
         <Table className="table-fixed w-max min-w-full max-w-none overflow-hidden text-[0.78rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
@@ -628,15 +636,15 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 {title}
               </TableHead>
             </TableRow>
-            <TableRow className="sticky top-[76px] z-30 h-7 border-b border-white/25 py-0 text-[0.8rem]">
+            <TableRow className="h-7 border-b border-white/25 py-0 text-[0.8rem]">
               <TableHead
-                className="sticky top-[76px] z-30 h-7 bg-green-950/95 px-2 py-1 text-left text-[0.78rem]"
+                className="sticky top-0 z-30 h-7 bg-green-950/95 px-2 py-1 text-left text-[0.78rem]"
                 style={{ width: "var(--rank-col-width)", minWidth: "var(--rank-col-width)" }}
               >
                 <span className="pl-1">#</span>
               </TableHead>
               <TableHead
-                className="sticky top-[76px] z-30 h-7 border-r border-white/25 bg-green-950/95 px-2 py-1 text-[0.78rem]"
+                className="sticky top-0 z-30 h-7 border-r border-white/25 bg-green-950/95 px-2 py-1 text-[0.78rem]"
                 style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
               >
                 <button
@@ -650,7 +658,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
               {Array.from({ length: 18 }, (_, index) => (
                 <TableHead
                   key={`week-head-${index + 1}`}
-                  className={`sticky top-[76px] z-30 h-7 bg-green-950/95 py-1 text-center text-[0.8rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
+                  className={`sticky top-0 z-30 h-7 bg-green-950/95 py-1 text-center text-[0.8rem] ${index === 0 ? "pl-[2px]" : "px-[1px]"}`}
                   style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
                 >
                   <button
@@ -664,7 +672,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </TableHead>
               ))}
               <TableHead
-                className="sticky top-[76px] z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
+                className="sticky top-0 z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
@@ -676,7 +684,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </button>
               </TableHead>
               <TableHead
-                className="sticky top-[76px] z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
+                className="sticky top-0 z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button
@@ -688,7 +696,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 </button>
               </TableHead>
               <TableHead
-                className="sticky top-[76px] z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
+                className="sticky top-0 z-30 h-7 bg-green-950/95 px-[1px] py-1 text-center text-[0.78rem]"
                 style={{ width: "var(--data-col-width)", minWidth: "var(--data-col-width)" }}
               >
                 <button

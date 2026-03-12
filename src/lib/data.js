@@ -23,7 +23,7 @@ function getTopWeekIndexes(weeks) {
 
 function buildLeagueData(rawSheets) {
   const years = Object.keys(rawSheets).sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
-  const currentSeasonYear = years.includes("2025") ? "2025" : years[0] ?? null;
+  const currentSeasonYear = years[0] ?? null;
 
   const seasons = {};
 
@@ -103,24 +103,37 @@ export async function fetchLeagueDataFromSheet() {
     // Try to fetch from Google Sheets directly
     const SHEET_ID = '1BhF9CJSN3CQO_9IpSmdvxWXvoDgXvukk_h1pfv9JcQc';
     
-    const [resp2024, resp2025] = await Promise.all([
-      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2024`),
-      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2025`)
+    const [resp2024, resp2025, resp2026] = await Promise.all([
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2024`, { cache: 'no-store' }),
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2025`, { cache: 'no-store' }),
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2026`, { cache: 'no-store' })
     ]);
     
     const csv2024 = await resp2024.text();
     const csv2025 = await resp2025.text();
+    const csv2026 = await resp2026.text();
     
-    const rawSheets = {
-      2024: parseSheetCSV(csv2024),
-      2025: parseSheetCSV(csv2025)
-    };
+    console.log('Fetched sheets - 2024:', csv2024.length, '2025:', csv2025.length, '2026:', csv2026.length);
+    
+    const data2024 = parseSheetCSV(csv2024);
+    const data2025 = parseSheetCSV(csv2025);
+    const data2026 = parseSheetCSV(csv2026);
+    
+    console.log('Parsed - 2024:', data2024.length, '2025:', data2025.length, '2026:', data2026.length);
+    
+    const rawSheets = {};
+    if (data2024.length > 0) rawSheets[2024] = data2024;
+    if (data2025.length > 0) rawSheets[2025] = data2025;
+    if (data2026.length > 0) rawSheets[2026] = data2026;
+    
+    console.log('Raw sheets keys:', Object.keys(rawSheets));
     
     cachedData = buildLeagueData(rawSheets);
     sheetCacheTime = now;
     return cachedData;
   } catch (error) {
     console.error("Sheet fetch failed:", error);
+    // Fall back to static data
     // Fall back to static data
     return getLeagueData();
   }
@@ -135,7 +148,10 @@ function parseSheetCSV(csv) {
   
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(',').map(v => v.replace(/"/g, ''));
-    const nameIdx = headers.findIndex(h => h.toLowerCase().includes('name') || h.toLowerCase().includes('player'));
+    // Support both "Name" and "Player" headers
+    const nameIdx = headers.findIndex(h => 
+      h.toLowerCase().includes('name') || h.toLowerCase().includes('player')
+    );
     if (nameIdx === -1) continue;
     
     const name = values[nameIdx];
@@ -144,7 +160,7 @@ function parseSheetCSV(csv) {
     const weeks = [];
     for (let j = 0; j < headers.length; j++) {
       const h = headers[j].toLowerCase();
-      if (h.includes('week') || h === 'w1' || h === 'w1 ') {
+      if (h.includes('week') || h.match(/^w\d+$/)) {
         const val = parseFloat(values[j]) || 0;
         weeks.push(val);
       }
