@@ -1014,12 +1014,150 @@ export function DFSApp({ data }: { data: LeagueData }) {
           )}
         </main>
 
+        {/* Mobile Tab Content */}
+        {isMobileView && (
+          <div className="px-3 pb-20 pt-4">
+            {/* Home Tab - Quick Stats & Leaderboard */}
+            {mobileTab === "home" && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-green-900/40 p-4">
+                  <h3 className="mb-3 text-lg font-bold text-white">🏆 This Week's Leaders</h3>
+                  <div className="space-y-2">
+                    {currentRows.slice(0, 5).map((row, i) => (
+                      <div key={row.name} className="flex items-center justify-between rounded-lg bg-white/5 p-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                            i === 0 ? "bg-yellow-500 text-black" : i === 1 ? "bg-gray-400 text-black" : i === 2 ? "bg-orange-600 text-white" : "bg-white/20 text-white"
+                          }`}>{i + 1}</span>
+                          <span className="text-sm font-medium text-green-50">{row.name}</span>
+                        </div>
+                        <span className="font-mono text-sm font-bold text-green-400">{row.weeks[currentRows.length > 0 ? 17 : 0] || 0} pts</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-green-900/40 p-4 text-center">
+                    <div className="text-2xl font-bold text-white">{participantCount}</div>
+                    <div className="text-xs uppercase text-green-200">Players</div>
+                  </div>
+                  <div className="rounded-xl bg-green-900/40 p-4 text-center">
+                    <div className="text-2xl font-bold text-white">{data.currentSeasonYear ?? "—"}</div>
+                    <div className="text-xs uppercase text-green-200">Season</div>
+                  </div>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => { setMobileTab("stats"); setView("current"); }}
+                  className="w-full rounded-xl bg-green-600 py-3 font-bold text-white transition hover:bg-green-500"
+                >
+                  View Full Stats →
+                </button>
+              </div>
+            )}
+
+            {/* Stats Tab - Card Grid */}
+            {mobileTab === "stats" && (
+              <div className="space-y-3">
+                {currentRows
+                  .sort((a, b) => b.total - a.total)
+                  .map((row, i) => (
+                    <div key={row.name} className="rounded-xl bg-green-900/40 p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs font-bold text-white">{i + 1}</span>
+                          <span className="font-semibold text-white">{row.name}</span>
+                        </div>
+                        <span className="font-mono text-lg font-bold text-green-400">{row.total}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-lg bg-white/5 p-2">
+                          <div className="text-xs text-green-200">Avg</div>
+                          <div className="font-mono font-semibold text-white">{row.avgWeekly}</div>
+                        </div>
+                        <div className="rounded-lg bg-white/5 p-2">
+                          <div className="text-xs text-green-200">Top 10 Avg</div>
+                          <div className="font-mono font-semibold text-white">{row.top10Avg}</div>
+                        </div>
+                        <div className="rounded-lg bg-white/5 p-2">
+                          <div className="text-xs text-green-200">Weeks</div>
+                          <div className="font-mono font-semibold text-white">{row.weeks.filter(w => w > 0).length}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Standings Tab - Ranked List */}
+            {mobileTab === "standings" && (
+              <div className="space-y-2">
+                {currentRows
+                  .sort((a, b) => b.total - a.total)
+                  .map((row, i) => (
+                    <div key={row.name} className={`flex items-center justify-between rounded-xl p-3 ${
+                      i < 3 ? "bg-yellow-500/20 border border-yellow-500/30" : "bg-green-900/40"
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
+                          i === 0 ? "bg-yellow-500 text-black" : i === 1 ? "bg-gray-400 text-black" : i === 2 ? "bg-orange-600 text-white" : "bg-white/20 text-white"
+                        }`}>{i + 1}</span>
+                        <span className="font-medium text-white">{row.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-green-400">{row.total}</div>
+                        <div className="text-xs text-green-200">points</div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* More Tab - Year Selection */}
+            {mobileTab === "more" && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-green-900/40 p-4">
+                  <h3 className="mb-3 font-bold text-white">📅 Previous Seasons</h3>
+                  <div className="space-y-2">
+                    {Object.keys(data.seasons)
+                      .filter(y => y !== data.currentSeasonYear)
+                      .sort((a, b) => b.localeCompare(a))
+                      .map(year => (
+                        <button
+                          key={year}
+                          type="button"
+                          onClick={() => { setSelectedYear(year); setView("previous"); setMobileTab("stats"); }}
+                          className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
+                        >
+                          {year} Season
+                        </button>
+                      ))}
+                  </div>
+                </div>
+                
+                <div className="rounded-xl bg-green-900/40 p-4">
+                  <h3 className="mb-3 font-bold text-white">⚙️ Settings</h3>
+                  <button
+                    type="button"
+                    onClick={() => setLayoutPreference("desktop")}
+                    className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
+                  >
+                    💻 Switch to Desktop View
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Mobile Bottom Tab Bar */}
         {isMobileView && (
           <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-white/25 bg-green-950/95 px-2 shadow-lg">
             <button
               type="button"
-              onClick={() => { setMobileTab("home"); setView("current"); }}
+              onClick={() => setMobileTab("home")}
               className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "home" ? "text-green-400" : "text-green-100"}`}
             >
               <span className="text-lg">🏠</span>
@@ -1027,7 +1165,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
             </button>
             <button
               type="button"
-              onClick={() => { setMobileTab("stats"); setView("current"); }}
+              onClick={() => setMobileTab("stats")}
               className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "stats" ? "text-green-400" : "text-green-100"}`}
             >
               <span className="text-lg">📊</span>
@@ -1035,7 +1173,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
             </button>
             <button
               type="button"
-              onClick={() => { setMobileTab("standings"); setView("current"); }}
+              onClick={() => setMobileTab("standings")}
               className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "standings" ? "text-green-400" : "text-green-100"}`}
             >
               <span className="text-lg">🏆</span>
@@ -1043,7 +1181,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
             </button>
             <button
               type="button"
-              onClick={() => { setMobileTab("more"); setView("previous"); }}
+              onClick={() => setMobileTab("more")}
               className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "more" ? "text-green-400" : "text-green-100"}`}
             >
               <span className="text-lg">📋</span>
