@@ -922,8 +922,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </details>
         </nav>
 
-        {/* Mobile/Desktop Toggle Buttons */}
-        <div className="flex items-center gap-1">
+        {/* Mobile/Desktop Toggle Buttons - desktop only */}
+        <div className="hidden lg:flex items-center gap-1">
           <button
             type="button"
             onClick={() => setLayoutPreference("mobile")}
@@ -955,7 +955,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
       </header>
 
       <div className="relative m-0 p-0 pt-20 md:h-[calc(100vh-5rem)]">
-        <aside className="w-full border-b border-white/25 bg-green-950/60 px-3 py-3 lg:hidden">
+        <aside className="w-full border-b border-white/25 bg-green-950/60 px-3 py-3 hidden lg:block">
           <nav className="space-y-5">
             <button
               type="button"
