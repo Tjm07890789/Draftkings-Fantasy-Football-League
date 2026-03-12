@@ -1,6 +1,8 @@
 const TOTAL_WEEKS = 18;
 
 let cachedData = null;
+let sheetCacheTime = 0;
+const SHEET_CACHE_TTL = 60 * 1000; // 60 seconds
 
 function formatNumber(value) {
   return Number.parseFloat(value.toFixed(2));
@@ -67,6 +69,7 @@ function buildLeagueData(rawSheets) {
 }
 
 export function getLeagueData() {
+  // For now, fall back to static data - will be replaced with API fetch
   if (cachedData) {
     return cachedData;
   }
@@ -85,4 +88,72 @@ export function getLeagueData() {
   }
 
   return cachedData;
+}
+
+// Server-side function to fetch from Google Sheets
+export async function fetchLeagueDataFromSheet() {
+  const now = Date.now();
+  
+  // Use cached data if fresh enough
+  if (cachedData && (now - sheetCacheTime) < SHEET_CACHE_TTL) {
+    return cachedData;
+  }
+  
+  try {
+    // Try to fetch from Google Sheets directly
+    const SHEET_ID = '1BhF9CJSN3CQO_9IpSmdvxWXvoDgXvukk_h1pfv9JcQc';
+    
+    const [resp2024, resp2025] = await Promise.all([
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2024`),
+      fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=2025`)
+    ]);
+    
+    const csv2024 = await resp2024.text();
+    const csv2025 = await resp2025.text();
+    
+    const rawSheets = {
+      2024: parseSheetCSV(csv2024),
+      2025: parseSheetCSV(csv2025)
+    };
+    
+    cachedData = buildLeagueData(rawSheets);
+    sheetCacheTime = now;
+    return cachedData;
+  } catch (error) {
+    console.error("Sheet fetch failed:", error);
+    // Fall back to static data
+    return getLeagueData();
+  }
+}
+
+function parseSheetCSV(csv) {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
+  const players = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.replace(/"/g, ''));
+    const nameIdx = headers.findIndex(h => h.toLowerCase().includes('name') || h.toLowerCase().includes('player'));
+    if (nameIdx === -1) continue;
+    
+    const name = values[nameIdx];
+    if (!name) continue;
+    
+    const weeks = [];
+    for (let j = 0; j < headers.length; j++) {
+      const h = headers[j].toLowerCase();
+      if (h.includes('week') || h === 'w1' || h === 'w1 ') {
+        const val = parseFloat(values[j]) || 0;
+        weeks.push(val);
+      }
+    }
+    
+    if (weeks.length > 0) {
+      players.push({ name, weeks });
+    }
+  }
+  
+  return players;
 }

@@ -1,7 +1,7 @@
 import { DFSApp } from "@/components/dfs-app";
-import { getLeagueData } from "@/lib/data";
+import { fetchLeagueDataFromSheet } from "@/lib/data";
 
-export default function Home() {
-  const leagueData = getLeagueData();
+export default async function Home() {
+  const leagueData = await fetchLeagueDataFromSheet();
   return <DFSApp data={leagueData} />;
 }
