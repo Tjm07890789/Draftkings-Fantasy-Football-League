@@ -831,7 +831,22 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
-  const participantCount = view === "previous" ? previousRows.length : currentRows.length;
+  
+  // Find latest week with any data for mobile leaderboard
+  const latestWeekWithData = React.useMemo(() => {
+    if (!currentRows.length) return 0;
+    let latest = 0;
+    for (const row of currentRows) {
+      for (let w = 0; w < row.weeks.length; w++) {
+        if (row.weeks[w] > 0) latest = Math.max(latest, w);
+      }
+    }
+    return latest;
+  }, [currentRows]);
+  
+  const displayRows = view === "previous" ? previousRows : currentRows;
+  const displaySeason = view === "previous" ? selectedYear : data.currentSeasonYear;
+  const participantCount = displayRows.length;
   const duesPerParticipantRaw = Number.parseFloat(process.env.NEXT_PUBLIC_DUES_PER_PARTICIPANT ?? "0");
   const duesPerParticipant = Number.isFinite(duesPerParticipantRaw) && duesPerParticipantRaw > 0 ? duesPerParticipantRaw : 0;
   const poolTotal = participantCount * duesPerParticipant;
@@ -1023,13 +1038,25 @@ export function DFSApp({ data }: { data: LeagueData }) {
         {/* Mobile Tab Content */}
         {isMobileView && (
           <div className="px-3 pb-20 pt-4">
+            {/* Season/Week Context Header */}
+            <div className="mb-4 rounded-xl bg-green-800/50 p-3 text-center">
+              <div className="text-lg font-bold text-white">{displaySeason} Season</div>
+              {latestWeekWithData > 0 && (
+                <div className="text-sm text-green-200">Week {latestWeekWithData + 1} Data</div>
+              )}
+            </div>
+            
             {/* Home Tab - Quick Stats & Leaderboard */}
             {mobileTab === "home" && (
               <div className="space-y-4">
                 <div className="rounded-xl bg-green-900/40 p-4">
-                  <h3 className="mb-3 text-lg font-bold text-white">🏆 This Week's Leaders</h3>
+                  <h3 className="mb-3 text-lg font-bold text-white">🏆 Week {latestWeekWithData + 1} Leaders</h3>
                   <div className="space-y-2">
-                    {currentRows.slice(0, 5).map((row, i) => (
+                    {displayRows
+                      .slice()
+                      .sort((a, b) => (b.weeks[latestWeekWithData] || 0) - (a.weeks[latestWeekWithData] || 0))
+                      .slice(0, 5)
+                      .map((row, i) => (
                       <div key={row.name} className="flex items-center justify-between rounded-lg bg-white/5 p-2">
                         <div className="flex items-center gap-2">
                           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
@@ -1037,7 +1064,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                           }`}>{i + 1}</span>
                           <span className="text-sm font-medium text-green-50">{row.name}</span>
                         </div>
-                        <span className="font-mono text-sm font-bold text-green-400">{row.weeks[currentRows.length > 0 ? 17 : 0] || 0} pts</span>
+                        <span className="font-mono text-sm font-bold text-green-400">{row.weeks[latestWeekWithData] || 0} pts</span>
                       </div>
                     ))}
                   </div>
@@ -1049,14 +1076,14 @@ export function DFSApp({ data }: { data: LeagueData }) {
                     <div className="text-xs uppercase text-green-200">Players</div>
                   </div>
                   <div className="rounded-xl bg-green-900/40 p-4 text-center">
-                    <div className="text-2xl font-bold text-white">{data.currentSeasonYear ?? "—"}</div>
+                    <div className="text-2xl font-bold text-white">{displaySeason}</div>
                     <div className="text-xs uppercase text-green-200">Season</div>
                   </div>
                 </div>
                 
                 <button
                   type="button"
-                  onClick={() => { setMobileTab("stats"); setView("current"); }}
+                  onClick={() => { setMobileTab("stats"); }}
                   className="w-full rounded-xl bg-green-600 py-3 font-bold text-white transition hover:bg-green-500"
                 >
                   View Full Stats →
@@ -1067,7 +1094,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
             {/* Stats Tab - Card Grid */}
             {mobileTab === "stats" && (
               <div className="space-y-3">
-                {currentRows
+                <div className="mb-2 text-center text-sm text-green-200">{displaySeason} Season - Ranked by Total</div>
+                {displayRows
                   .sort((a, b) => b.total - a.total)
                   .map((row, i) => (
                     <div key={row.name} className="rounded-xl bg-green-900/40 p-4">
@@ -1100,7 +1128,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
             {/* Standings Tab - Ranked List */}
             {mobileTab === "standings" && (
               <div className="space-y-2">
-                {currentRows
+                <div className="mb-2 text-center text-sm text-green-200">{displaySeason} Season</div>
+                {displayRows
                   .sort((a, b) => b.total - a.total)
                   .map((row, i) => (
                     <div key={row.name} className={`flex items-center justify-between rounded-xl p-3 ${
