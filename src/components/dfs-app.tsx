@@ -805,6 +805,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const [layoutPreference, setLayoutPreference] = React.useState<LayoutPreference>("auto");
   const [isDesktopByViewport, setIsDesktopByViewport] = React.useState<boolean | undefined>(undefined);
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("home");
+  const [mobileSelectedWeek, setMobileSelectedWeek] = React.useState<number>(-1); // -1 = latest week with data
   const [mounted, setMounted] = React.useState(false);
 
   // Detect viewport size and load saved preference
@@ -834,15 +835,18 @@ export function DFSApp({ data }: { data: LeagueData }) {
   
   // Find latest week with any data for mobile leaderboard
   const latestWeekWithData = React.useMemo(() => {
-    if (!currentRows.length) return 0;
+    if (!displayRows.length) return 0;
     let latest = 0;
-    for (const row of currentRows) {
+    for (const row of displayRows) {
       for (let w = 0; w < row.weeks.length; w++) {
         if (row.weeks[w] > 0) latest = Math.max(latest, w);
       }
     }
     return latest;
-  }, [currentRows]);
+  }, [displayRows]);
+  
+  // Active week to display: user selected or latest with data
+  const activeWeek = mobileSelectedWeek === -1 ? latestWeekWithData : mobileSelectedWeek;
   
   const displayRows = view === "previous" ? previousRows : currentRows;
   const displaySeason = view === "previous" ? selectedYear : data.currentSeasonYear;
@@ -1038,23 +1042,35 @@ export function DFSApp({ data }: { data: LeagueData }) {
         {/* Mobile Tab Content */}
         {isMobileView && (
           <div className="px-3 pb-20 pt-4">
-            {/* Season/Week Context Header */}
-            <div className="mb-4 rounded-xl bg-green-800/50 p-3 text-center">
+            {/* Season/Week Context Header - Clickable to pick week */}
+            <button
+              type="button"
+              onClick={() => {
+                // Cycle through available weeks (latest + any weeks with data)
+                const weeksWithData: number[] = [];
+                for (let w = 0; w < 18; w++) {
+                  if (displayRows.some(r => (r.weeks[w] || 0) > 0)) weeksWithData.push(w);
+                }
+                if (weeksWithData.length === 0) return;
+                const currentIdx = weeksWithData.indexOf(activeWeek);
+                const nextIdx = (currentIdx + 1) % weeksWithData.length;
+                setMobileSelectedWeek(weeksWithData[nextIdx]);
+              }}
+              className="mb-4 w-full rounded-xl bg-green-800/50 p-3 text-center transition hover:bg-green-700/50"
+            >
               <div className="text-lg font-bold text-white">{displaySeason} Season</div>
-              {latestWeekWithData > 0 && (
-                <div className="text-sm text-green-200">Week {latestWeekWithData + 1} Data</div>
-              )}
-            </div>
+              <div className="text-sm text-green-200">Week {activeWeek + 1} Data (tap to change)</div>
+            </button>
             
             {/* Home Tab - Quick Stats & Leaderboard */}
             {mobileTab === "home" && (
               <div className="space-y-4">
                 <div className="rounded-xl bg-green-900/40 p-4">
-                  <h3 className="mb-3 text-lg font-bold text-white">🏆 Week {latestWeekWithData + 1} Leaders</h3>
+                  <h3 className="mb-3 text-lg font-bold text-white">🏆 Week {activeWeek + 1} Leaders</h3>
                   <div className="space-y-2">
                     {displayRows
                       .slice()
-                      .sort((a, b) => (b.weeks[latestWeekWithData] || 0) - (a.weeks[latestWeekWithData] || 0))
+                      .sort((a, b) => (b.weeks[activeWeek] || 0) - (a.weeks[activeWeek] || 0))
                       .slice(0, 5)
                       .map((row, i) => (
                       <div key={row.name} className="flex items-center justify-between rounded-lg bg-white/5 p-2">
@@ -1064,7 +1080,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                           }`}>{i + 1}</span>
                           <span className="text-sm font-medium text-green-50">{row.name}</span>
                         </div>
-                        <span className="font-mono text-sm font-bold text-green-400">{row.weeks[latestWeekWithData] || 0} pts</span>
+                        <span className="font-mono text-sm font-bold text-green-400">{row.weeks[activeWeek] || 0} pts</span>
                       </div>
                     ))}
                   </div>
