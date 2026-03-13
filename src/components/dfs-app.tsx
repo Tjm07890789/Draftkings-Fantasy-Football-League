@@ -465,7 +465,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
     [rows],
   );
   const rankColWidth = "44px";
-  const nameColWidth = `${Math.max((longestNameChars + 2) * 8, 150)}px`;
+  const nameColWidth = `${Math.max((longestNameChars + 2) * 10, 180)}px`;
   const dataColWidth = "36px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
@@ -591,7 +591,10 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         } as React.CSSProperties
       }
     >
-      <div className="z-20 flex flex-wrap items-center justify-end gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
+      <div className="z-20 flex flex-wrap items-center justify-between gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-white md:text-base">{title}</h2>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -630,11 +633,6 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       <div className="overflow-y-auto" style={{ maxHeight: "70vh" }}>
         <Table className="table-fixed w-full max-w-none text-[0.55rem]">
           <TableHeader>
-            <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
-              <TableHead colSpan={totalGridColumns} className="h-5 px-2 py-1 text-left text-[0.82rem] font-bold text-white">
-                {title}
-              </TableHead>
-            </TableRow>
             <TableRow className="h-7 border-b border-white/25 py-0 text-[0.8rem]">
               <TableHead
                 className="sticky top-0 z-30 h-7 bg-green-950/95 px-2 py-1 text-left text-[0.78rem]"
