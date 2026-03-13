@@ -3,7 +3,6 @@
 import * as React from "react";
 import Image from "next/image";
 
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type View = "welcome" | "current" | "previous";
@@ -592,7 +591,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         } as React.CSSProperties
       }
     >
-      <div className="sticky top-20 z-30 flex flex-wrap items-center justify-end gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
+      <div className="z-20 flex flex-wrap items-center justify-end gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -628,7 +627,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         </div>
       </div>
       {seasonPanel === "grid" && (
-      <div className="overflow-y-auto" style={{ maxHeight: "65vh" }}>
+      <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 120px)" }}>
         <Table className="table-fixed w-full max-w-none text-[0.55rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
@@ -973,47 +972,11 @@ export function DFSApp({ data }: { data: LeagueData }) {
         </div>
       </header>
 
-      <div className="relative m-0 flex flex-1 flex-col overflow-hidden p-0 pt-20 md:h-[calc(100vh-5rem)]">
-        <aside className="hidden w-64 flex-shrink-0 overflow-y-auto border-b border-white/25 bg-green-950/60 px-3 py-3 lg:block">
-          <nav className="space-y-5">
-            <button
-              type="button"
-              onClick={() => setView("current")}
-              className="w-full rounded-md bg-white/10 px-3 py-2 text-left text-sm font-semibold text-green-50 transition hover:bg-white/20"
-            >
-              Current Year
-            </button>
-
-            <section>
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-green-100">Previous Seasons</h2>
-              <Accordion>
-                <AccordionItem value="previous-seasons">
-                  <AccordionTrigger value="previous-seasons">Choose Year</AccordionTrigger>
-                  <AccordionContent value="previous-seasons" className="space-y-2">
-                    {data.previousYears.map((year) => (
-                      <button
-                        key={year}
-                        type="button"
-                        onClick={() => {
-                          setSelectedYear(year);
-                          setView("previous");
-                        }}
-                        className="block w-full rounded-md bg-white/5 px-3 py-2 text-left text-sm text-green-100 transition hover:bg-white/15"
-                      >
-                        {year}
-                      </button>
-                    ))}
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </section>
-
-          </nav>
-        </aside>
+      <div className="relative m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 pt-20">
 
         {/* Desktop-only main content - hidden on mobile */}
         {!isMobileView && (
-        <main className="flex-1 overflow-y-auto md:h-[calc(100vh-10rem)]">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 md:p-3">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
