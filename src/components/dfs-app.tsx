@@ -628,7 +628,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         </div>
       </div>
       {seasonPanel === "grid" && (
-      <div className="m-0 max-w-full p-0 md:h-[calc(100%-3.5rem)] md:overflow-y-auto">
+      <div className="overflow-y-auto overflow-x-auto">
         <Table className="table-fixed w-full max-w-none text-[0.55rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
@@ -882,7 +882,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
   }, [selectedYear]);
 
   return (
-    <div className="gridiron-bg m-0 h-screen overflow-y-auto p-0 text-white md:overflow-hidden">
+    <div className="gridiron-bg m-0 flex h-screen flex-col p-0 text-white md:overflow-hidden">
       <header className="fixed top-0 right-0 left-0 z-40 flex h-20 w-full items-center justify-between gap-4 border-b border-white/25 bg-green-950/85 px-4 backdrop-blur-sm md:px-6">
         <div className="flex min-w-0 items-center gap-3 md:gap-4">
           <Image
@@ -1013,7 +1013,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
         {/* Desktop-only main content - hidden on mobile */}
         {!isMobileView && (
-        <main className="m-0 w-full overflow-auto px-0 pt-1 pb-20 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-auto md:px-0 md:pt-2 md:pb-0">
+        <main className="flex-1 overflow-y-auto">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
