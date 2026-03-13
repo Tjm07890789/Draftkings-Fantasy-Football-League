@@ -467,7 +467,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   );
   const rankColWidth = "44px";
   const nameColWidth = `${Math.max((longestNameChars + 2) * 8, 150)}px`;
-  const dataColWidth = "42px";
+  const dataColWidth = "36px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
@@ -629,7 +629,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       </div>
       {seasonPanel === "grid" && (
       <div className="m-0 max-w-full p-0 md:h-[calc(100%-3.5rem)] md:overflow-hidden">
-        <Table className="table-fixed w-full max-w-none text-[0.65rem]">
+        <Table className="table-fixed w-full max-w-none text-[0.55rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
               <TableHead colSpan={totalGridColumns} className="h-5 px-2 py-1 text-left text-[0.82rem] font-bold text-white">
