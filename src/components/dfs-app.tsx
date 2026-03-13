@@ -833,6 +833,10 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
   const previousRows = selectedYear ? data.seasons[selectedYear] ?? [] : [];
   
+  const displayRows = view === "previous" ? previousRows : currentRows;
+  const displaySeason = view === "previous" ? selectedYear : data.currentSeasonYear;
+  const participantCount = displayRows.length;
+  
   // Find latest week with any data for mobile leaderboard
   const latestWeekWithData = React.useMemo(() => {
     if (!displayRows.length) return 0;
@@ -847,10 +851,6 @@ export function DFSApp({ data }: { data: LeagueData }) {
   
   // Active week to display: user selected or latest with data
   const activeWeek = mobileSelectedWeek === -1 ? latestWeekWithData : mobileSelectedWeek;
-  
-  const displayRows = view === "previous" ? previousRows : currentRows;
-  const displaySeason = view === "previous" ? selectedYear : data.currentSeasonYear;
-  const participantCount = displayRows.length;
   const duesPerParticipantRaw = Number.parseFloat(process.env.NEXT_PUBLIC_DUES_PER_PARTICIPANT ?? "0");
   const duesPerParticipant = Number.isFinite(duesPerParticipantRaw) && duesPerParticipantRaw > 0 ? duesPerParticipantRaw : 0;
   const poolTotal = participantCount * duesPerParticipant;
@@ -1013,7 +1013,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
         {/* Desktop-only main content - hidden on mobile */}
         {!isMobileView && (
-        <main className="m-0 w-full overflow-auto px-0 pt-1 pb-20 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-hidden md:px-0 md:pt-2 md:pb-0">
+        <main className="m-0 w-full overflow-auto px-0 pt-1 pb-20 md:flex md:h-[calc(100vh-5rem)] md:w-full md:items-center md:justify-start md:overflow-auto md:px-0 md:pt-2 md:pb-0">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
@@ -1042,25 +1042,94 @@ export function DFSApp({ data }: { data: LeagueData }) {
         {/* Mobile Tab Content */}
         {isMobileView && (
           <div className="px-3 pb-20 pt-4">
-            {/* Season/Week Context Header - Clickable to pick week */}
-            <button
-              type="button"
-              onClick={() => {
-                // Cycle through available weeks (latest + any weeks with data)
-                const weeksWithData: number[] = [];
-                for (let w = 0; w < 18; w++) {
-                  if (displayRows.some(r => (r.weeks[w] || 0) > 0)) weeksWithData.push(w);
-                }
-                if (weeksWithData.length === 0) return;
-                const currentIdx = weeksWithData.indexOf(activeWeek);
-                const nextIdx = (currentIdx + 1) % weeksWithData.length;
-                setMobileSelectedWeek(weeksWithData[nextIdx]);
-              }}
-              className="mb-4 w-full rounded-xl bg-green-800/50 p-3 text-center transition hover:bg-green-700/50"
-            >
-              <div className="text-lg font-bold text-white">{displaySeason} Season</div>
-              <div className="text-sm text-green-200">Week {activeWeek + 1} Data (tap to change)</div>
-            </button>
+            {/* Season/Week Context Header - Left/Right tap for week nav */}
+            <div className="mb-4 rounded-xl bg-green-800/50 p-2">
+              {/* Year Selector */}
+              <div className="mb-2 flex justify-center gap-2">
+                {[data.currentSeasonYear, ...data.previousYears].map((year) => {
+                  const isCurrentYear = view === "current" && year === data.currentSeasonYear;
+                  const isSelectedPreviousYear = view === "previous" && selectedYear === year;
+                  const isHighlighted = isCurrentYear || isSelectedPreviousYear;
+                  
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      onClick={() => {
+                        // When switching years, default to week 1
+                        const weeksWithData: number[] = [];
+                        for (let w = 0; w < 18; w++) {
+                          if (year === data.currentSeasonYear ? 
+                            currentRows.some(r => (r.weeks[w] || 0) > 0) :
+                            previousRows.some(r => (r.weeks[w] || 0) > 0)) {
+                            weeksWithData.push(w);
+                          }
+                        }
+                        // Set to week 1 (index 0) if available, otherwise latest
+                        const defaultWeek = weeksWithData.includes(0) ? 0 : (weeksWithData[0] ?? 0);
+                        setMobileSelectedWeek(defaultWeek);
+                        
+                        if (year === data.currentSeasonYear) {
+                          setView("current");
+                        } else {
+                          setSelectedYear(year);
+                          setView("previous");
+                        }
+                      }}
+                      className={`rounded-lg px-3 py-1 text-sm font-semibold transition ${
+                        isHighlighted
+                          ? "bg-green-500 text-white"
+                          : "bg-white/10 text-green-200 hover:bg-white/20"
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              {/* Week Nav - Left/Right taps */}
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const weeksWithData: number[] = [];
+                    for (let w = 0; w < 18; w++) {
+                      if (displayRows.some(r => (r.weeks[w] || 0) > 0)) weeksWithData.push(w);
+                    }
+                    if (weeksWithData.length === 0) return;
+                    const currentIdx = weeksWithData.indexOf(activeWeek);
+                    const prevIdx = currentIdx <= 0 ? weeksWithData.length - 1 : currentIdx - 1;
+                    setMobileSelectedWeek(weeksWithData[prevIdx]);
+                  }}
+                  className="flex-1 py-2 text-left text-green-200 hover:text-white"
+                >
+                  ← Prev
+                </button>
+                
+                <div className="text-center">
+                  <div className="text-lg font-bold text-white">Week {activeWeek + 1}</div>
+                  <div className="text-xs text-green-200">{displaySeason} Season</div>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    const weeksWithData: number[] = [];
+                    for (let w = 0; w < 18; w++) {
+                      if (displayRows.some(r => (r.weeks[w] || 0) > 0)) weeksWithData.push(w);
+                    }
+                    if (weeksWithData.length === 0) return;
+                    const currentIdx = weeksWithData.indexOf(activeWeek);
+                    const nextIdx = (currentIdx + 1) % weeksWithData.length;
+                    setMobileSelectedWeek(weeksWithData[nextIdx]);
+                  }}
+                  className="flex-1 py-2 text-right text-green-200 hover:text-white"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
             
             {/* Home Tab - Quick Stats & Leaderboard */}
             {mobileTab === "home" && (
