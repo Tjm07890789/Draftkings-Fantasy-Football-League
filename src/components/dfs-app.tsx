@@ -973,8 +973,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
         </div>
       </header>
 
-      <div className="relative m-0 p-0 pt-20 md:h-[calc(100vh-5rem)]">
-        <aside className="w-full border-b border-white/25 bg-green-950/60 px-3 py-3 hidden lg:block">
+      <div className="relative m-0 flex flex-1 flex-col overflow-hidden p-0 pt-20 md:h-[calc(100vh-5rem)]">
+        <aside className="hidden w-64 flex-shrink-0 overflow-y-auto border-b border-white/25 bg-green-950/60 px-3 py-3 lg:block">
           <nav className="space-y-5">
             <button
               type="button"
