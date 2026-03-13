@@ -628,7 +628,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         </div>
       </div>
       {seasonPanel === "grid" && (
-      <div className="overflow-y-auto" style={{ height: "calc(100vh - 180px)" }}>
+      <div className="overflow-y-auto" style={{ height: "calc(100vh - 200px)" }}>
         <Table className="table-fixed w-full max-w-none text-[0.55rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
