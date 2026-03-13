@@ -1013,7 +1013,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
         {/* Desktop-only main content - hidden on mobile */}
         {!isMobileView && (
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto md:h-[calc(100vh-10rem)]">
           {view === "welcome" && (
             <div className="text-center">
               <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
