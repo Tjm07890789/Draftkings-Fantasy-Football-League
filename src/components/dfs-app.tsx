@@ -467,7 +467,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   );
   const rankColWidth = "44px";
   const nameColWidth = `${Math.max((longestNameChars + 2) * 8, 150)}px`;
-  const dataColWidth = "60px";
+  const dataColWidth = "42px";
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
@@ -628,8 +628,8 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         </div>
       </div>
       {seasonPanel === "grid" && (
-      <div className="m-0 max-w-full overflow-auto p-0 md:h-[calc(100%-3.5rem)] md:overflow-auto">
-        <Table className="table-fixed w-max min-w-full max-w-none overflow-hidden text-[0.78rem]">
+      <div className="m-0 max-w-full p-0 md:h-[calc(100%-3.5rem)] md:overflow-hidden">
+        <Table className="table-fixed w-full max-w-none text-[0.65rem]">
           <TableHeader>
             <TableRow className="h-5 bg-emerald-900/55 py-0 text-[0.82rem]">
               <TableHead colSpan={totalGridColumns} className="h-5 px-2 py-1 text-left text-[0.82rem] font-bold text-white">
@@ -882,7 +882,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
   }, [selectedYear]);
 
   return (
-    <div className="gridiron-bg m-0 h-screen overflow-auto p-0 text-white md:overflow-hidden">
+    <div className="gridiron-bg m-0 h-screen overflow-y-auto p-0 text-white md:overflow-hidden">
       <header className="fixed top-0 right-0 left-0 z-40 flex h-20 w-full items-center justify-between gap-4 border-b border-white/25 bg-green-950/85 px-4 backdrop-blur-sm md:px-6">
         <div className="flex min-w-0 items-center gap-3 md:gap-4">
           <Image
