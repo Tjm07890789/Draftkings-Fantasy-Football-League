@@ -8,9 +8,9 @@ function formatNumber(value) {
   return Number.parseFloat(value.toFixed(2));
 }
 
-function getTopWeekIndexes(weeks) {
-  return weeks
-    .map((score, index) => ({ score, index }))
+function getTopWeekIndexes(weeks, eligibleIndexes = weeks.map((_, index) => index)) {
+  return eligibleIndexes
+    .map((index) => ({ score: weeks[index] ?? 0, index }))
     .sort((a, b) => {
       if (b.score !== a.score) {
         return b.score - a.score;
@@ -21,6 +21,26 @@ function getTopWeekIndexes(weeks) {
     .map((entry) => entry.index);
 }
 
+function getScoresForIndexes(weeks, indexes) {
+  return indexes.map((index) => weeks[index] ?? 0);
+}
+
+function getAverage(values) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getTopAverage(values, limit) {
+  const ranked = [...values].sort((a, b) => b - a).slice(0, limit);
+  return getAverage(ranked);
+}
+
+function getActiveWeekIndexes(rows) {
+  return Array.from({ length: TOTAL_WEEKS }, (_, index) => index).filter((index) =>
+    rows.some((row) => (row.weeks[index] ?? 0) > 0),
+  );
+}
+
 function buildLeagueData(rawSheets) {
   const years = Object.keys(rawSheets).sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
   const currentSeasonYear = years[0] ?? null;
@@ -29,30 +49,22 @@ function buildLeagueData(rawSheets) {
 
   for (const year of years) {
     const rows = rawSheets[year] ?? [];
-    const currentWeek = rows.reduce((maxWeek, row) => {
-      for (let index = TOTAL_WEEKS - 1; index >= 0; index -= 1) {
-        if (typeof row.weeks[index] === "number") {
-          return Math.max(maxWeek, index + 1);
-        }
-      }
-      return maxWeek;
-    }, 0);
+    const activeWeekIndexes = getActiveWeekIndexes(rows);
+    const activeWeekCount = activeWeekIndexes.length;
+    const currentWeek = activeWeekIndexes.length ? activeWeekIndexes[activeWeekIndexes.length - 1] + 1 : 0;
 
     seasons[year] = rows.map((row) => {
       const normalizedWeeks = row.weeks.map((score) => (typeof score === "number" ? score : 0));
-      const playedWeeks = row.weeks.filter((score) => typeof score === "number");
-      const playedTotal = playedWeeks.reduce((sum, score) => sum + score, 0);
+      const activeWeekScores = getScoresForIndexes(normalizedWeeks, activeWeekIndexes);
       const total = normalizedWeeks.reduce((sum, score) => sum + score, 0);
-      const avgWeekly = playedWeeks.length > 0 ? playedTotal / playedWeeks.length : 0;
-      const top10Scores = [...normalizedWeeks].sort((a, b) => b - a).slice(0, 10);
-      const computedTop10Avg =
-        top10Scores.length > 0 ? top10Scores.reduce((sum, score) => sum + score, 0) / top10Scores.length : 0;
+      const avgWeekly = getAverage(activeWeekScores);
+      const computedTop10Avg = getTopAverage(activeWeekScores, 10);
       const top10Avg = currentWeek <= 11 ? avgWeekly : computedTop10Avg;
 
       return {
         name: row.name,
         weeks: normalizedWeeks.map((score) => formatNumber(score)),
-        top10WeekIndexes: getTopWeekIndexes(normalizedWeeks),
+        top10WeekIndexes: getTopWeekIndexes(normalizedWeeks, activeWeekIndexes),
         total: formatNumber(total),
         avgWeekly: formatNumber(avgWeekly),
         top10Avg: formatNumber(top10Avg),

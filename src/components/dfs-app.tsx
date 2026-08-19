@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type View = "welcome" | "current" | "previous";
+type View = "current" | "previous";
 
 type SeasonRow = {
   name: string;
@@ -32,6 +33,7 @@ const LAYOUT_PREF_KEY = "dfs_v1_layout_pref";
 
 const NAV_COOKIE = "dfs_v1_last_nav";
 const SEASON_COOKIE = "dfs_v1_last_season";
+const AVG_WEEKLY_HELP = "Avg Weekly = total points divided by the number of season weeks where at least one player recorded a score.";
 
 function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
@@ -687,9 +689,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                 <button
                   type="button"
                   onClick={() => handleSort("avgWeekly")}
+                  title={AVG_WEEKLY_HELP}
+                  aria-label={`Avg Weekly. ${AVG_WEEKLY_HELP}`}
                   className="w-full cursor-pointer text-center font-semibold text-amber-300"
                 >
-                  Avg Weekly{renderSortLabel("avgWeekly")}
+                  Avg Weekly*{renderSortLabel("avgWeekly")}
                 </button>
               </TableHead>
               <TableHead
@@ -781,8 +785,9 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       </div>
       )}
       {seasonPanel === "grid" && (
-        <div className="px-3 pb-2 text-[0.6rem] text-green-100/80">
-          Sorted by {getColumnLabel(sortColumn)} ({sortDirection})
+        <div className="space-y-1 px-3 pb-2 text-[0.6rem] text-green-100/80">
+          <div>Sorted by {getColumnLabel(sortColumn)} ({sortDirection})</div>
+          <div>* {AVG_WEEKLY_HELP}</div>
         </div>
       )}
       {seasonPanel === "statistics" && (
@@ -795,7 +800,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
 }
 
 export function DFSApp({ data }: { data: LeagueData }) {
-  const [view, setView] = React.useState<View>("welcome");
+  const [view, setView] = React.useState<View>("current");
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
   
   // Mobile/Desktop layout state
@@ -818,6 +823,14 @@ export function DFSApp({ data }: { data: LeagueData }) {
     window.addEventListener("resize", checkViewport);
     return () => window.removeEventListener("resize", checkViewport);
   }, []);
+
+  React.useEffect(() => {
+    if (!mounted) return;
+    const forcedView = new URLSearchParams(window.location.search).get("view");
+    if (forcedView === "mobile" || forcedView === "desktop" || forcedView === "auto") {
+      setLayoutPreference(forcedView);
+    }
+  }, [mounted]);
 
   React.useEffect(() => {
     window.localStorage.setItem(LAYOUT_PREF_KEY, layoutPreference);
@@ -883,16 +896,23 @@ export function DFSApp({ data }: { data: LeagueData }) {
       <header className="fixed top-0 right-0 left-0 z-40 flex h-20 w-full items-center justify-between gap-4 border-b border-white/25 bg-green-950/85 px-4 backdrop-blur-sm md:px-6">
         <div className="flex min-w-0 items-center gap-3 md:gap-4">
           <Image
-            src="https://upload.wikimedia.org/wikipedia/en/a/a2/National_Football_League_logo.svg"
-            alt="NFL logo"
-            width={44}
-            height={54}
-            className="h-10 w-auto md:h-12"
+            src="/dfs-league-logo.png"
+            alt="DFS League logo"
+            width={64}
+            height={64}
+            className="h-12 w-12 rounded-xl object-contain md:h-14 md:w-14"
+            priority
           />
           <h1 className="truncate text-lg font-bold tracking-wide md:text-2xl">DFS Football League</h1>
         </div>
 
         <nav className="hidden items-center gap-2 lg:flex">
+          <Link
+            href="/"
+            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20"
+          >
+            DFS League News
+          </Link>
           <button
             type="button"
             onClick={() => setView("current")}
@@ -975,13 +995,6 @@ export function DFSApp({ data }: { data: LeagueData }) {
         {/* Desktop-only main content - hidden on mobile */}
         {!isMobileView && (
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 md:p-3">
-          {view === "welcome" && (
-            <div className="text-center">
-              <h2 className="text-4xl font-extrabold tracking-wide text-white">Welcome to DFS Football League</h2>
-              <p className="mt-3 text-lg text-green-100">Select a section from the left navigation to begin.</p>
-            </div>
-          )}
-
           {view === "current" && (
             <SeasonGrid
               title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
@@ -1002,7 +1015,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
         {/* Mobile Tab Content */}
         {isMobileView && (
-          <div className="px-3 pb-20 pt-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-20 pt-4">
             {/* Season/Week Context Header - Left/Right tap for week nav */}
             <div className="mb-4 rounded-xl bg-green-800/50 p-2">
               {/* Year Selector */}
@@ -1097,11 +1110,10 @@ export function DFSApp({ data }: { data: LeagueData }) {
               <div className="space-y-4">
                 <div className="rounded-xl bg-green-900/40 p-4">
                   <h3 className="mb-3 text-lg font-bold text-white">🏆 Week {activeWeek + 1} Leaders</h3>
-                  <div className="space-y-2">
+                  <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
                     {displayRows
                       .slice()
                       .sort((a, b) => (b.weeks[activeWeek] || 0) - (a.weeks[activeWeek] || 0))
-                      .slice(0, 5)
                       .map((row, i) => (
                       <div key={row.name} className="flex items-center justify-between rounded-lg bg-white/5 p-2">
                         <div className="flex items-center gap-2">
@@ -1115,18 +1127,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                     ))}
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-green-900/40 p-4 text-center">
-                    <div className="text-2xl font-bold text-white">{participantCount}</div>
-                    <div className="text-xs uppercase text-green-200">Players</div>
-                  </div>
-                  <div className="rounded-xl bg-green-900/40 p-4 text-center">
-                    <div className="text-2xl font-bold text-white">{displaySeason}</div>
-                    <div className="text-xs uppercase text-green-200">Season</div>
-                  </div>
-                </div>
-                
+
                 <button
                   type="button"
                   onClick={() => { setMobileTab("stats"); }}
@@ -1141,6 +1142,9 @@ export function DFSApp({ data }: { data: LeagueData }) {
             {mobileTab === "stats" && (
               <div className="space-y-3">
                 <div className="mb-2 text-center text-sm text-green-200">{displaySeason} Season - Ranked by Total</div>
+                <div className="rounded-lg bg-white/5 px-3 py-2 text-center text-xs text-green-100/85">
+                  {AVG_WEEKLY_HELP}
+                </div>
                 {displayRows
                   .sort((a, b) => b.total - a.total)
                   .map((row, i) => (
@@ -1154,7 +1158,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="rounded-lg bg-white/5 p-2">
-                          <div className="text-xs text-green-200">Avg</div>
+                          <div className="text-xs text-green-200">Avg Weekly*</div>
                           <div className="font-mono font-semibold text-white">{row.avgWeekly}</div>
                         </div>
                         <div className="rounded-lg bg-white/5 p-2">
@@ -1220,12 +1224,25 @@ export function DFSApp({ data }: { data: LeagueData }) {
                 
                 <div className="rounded-xl bg-green-900/40 p-4">
                   <h3 className="mb-3 font-bold text-white">⚙️ Settings</h3>
+                  <Link
+                    href="/"
+                    className="mb-2 block w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
+                  >
+                    📰 Open DFS League News
+                  </Link>
                   <button
                     type="button"
                     onClick={() => setLayoutPreference("desktop")}
-                    className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
+                    className="mb-2 w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
                     💻 Switch to Desktop View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLayoutPreference("auto")}
+                    className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
+                  >
+                    📱 Use Auto Device Layout
                   </button>
                 </div>
               </div>

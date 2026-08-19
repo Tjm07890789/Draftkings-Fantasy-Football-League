@@ -36,6 +36,26 @@ function parseCSV(csv: string) {
   return players;
 }
 
+function getActiveWeekIndexes(rows: Array<{ weeks: number[] }>) {
+  return Array.from({ length: TOTAL_WEEKS }, (_, index) => index).filter((index) =>
+    rows.some((row) => (row.weeks[index] ?? 0) > 0),
+  );
+}
+
+function getScoresForIndexes(weeks: number[], indexes: number[]) {
+  return indexes.map((index) => weeks[index] ?? 0);
+}
+
+function getAverage(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getTopAverage(values: number[], limit: number) {
+  const ranked = [...values].sort((a, b) => b - a).slice(0, limit);
+  return getAverage(ranked);
+}
+
 function buildLeagueData(rawSheets: Record<string, any[]>) {
   const years = Object.keys(rawSheets).sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
   const currentSeasonYear = years[0] ?? null;
@@ -43,15 +63,15 @@ function buildLeagueData(rawSheets: Record<string, any[]>) {
 
   for (const year of years) {
     const rows = rawSheets[year] ?? [];
+    const activeWeekIndexes = getActiveWeekIndexes(rows);
+    const activeWeekCount = activeWeekIndexes.length;
     
     seasons[year] = rows.map((row: any) => {
       const normalizedWeeks = row.weeks.map((score: number) => typeof score === "number" ? score : 0);
-      const playedWeeks = row.weeks.filter((score: number) => typeof score === "number");
-      const playedTotal = playedWeeks.reduce((sum: number, score: number) => sum + score, 0);
+      const activeWeekScores = getScoresForIndexes(normalizedWeeks, activeWeekIndexes);
       const total = normalizedWeeks.reduce((sum: number, score: number) => sum + score, 0);
-      const avgWeekly = playedWeeks.length > 0 ? playedTotal / playedWeeks.length : 0;
-      const top10Scores = [...normalizedWeeks].sort((a: number, b: number) => b - a).slice(0, 10);
-      const computedTop10Avg = top10Scores.length > 0 ? top10Scores.reduce((sum: number, score: number) => sum + score, 0) / top10Scores.length : 0;
+      const avgWeekly = getAverage(activeWeekScores);
+      const computedTop10Avg = getTopAverage(activeWeekScores, 10);
 
       return {
         name: row.name,
