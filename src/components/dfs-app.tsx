@@ -458,8 +458,269 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
   );
 }
 
+type WeeklyResultsListItem = { season: number; week: number; participantCount: number; totalPrizes: number | null };
+type WeeklyResultTile = { playerName: string; value: number } | null;
+type WeeklyResultEntry = { rank: number | null; entryName: string; points: number | null; prize: number | null };
+type WeeklyResultsSummary = {
+  season: number;
+  week: number;
+  entryFee: number | null;
+  grossPool: number | null;
+  totalPrizes: number | null;
+  participantCount: number;
+  entries: WeeklyResultEntry[];
+  mostRostered: WeeklyResultTile;
+  highestFieldScore: WeeklyResultTile;
+  winningLineupEdge: WeeklyResultTile;
+  chalk: WeeklyResultTile;
+};
+type WeeklyResultLineupPlayer = {
+  rosterPosition: string | null;
+  playerName: string;
+  fieldPoints: number | null;
+  draftedPct: number | null;
+  fpProjection: number | null;
+  fpEcrRank: number | null;
+  injuryStatus: string | null;
+  probabilityOfPlaying: number | null;
+};
+
+function injuryTagColor(status: string | null): string {
+  if (!status || status === "HEALTHY" || status === "PROBABLE") return "text-green-100/70";
+  if (status === "OUT" || status === "IR") return "text-rose-300";
+  if (status === "DOUBTFUL") return "text-amber-300";
+  return "text-yellow-200";
+}
+
+function EntryLineupPanel({ season, week, entryName }: { season: number; week: number; entryName: string }) {
+  const [lineup, setLineup] = React.useState<WeeklyResultLineupPlayer[] | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/weekly-results?season=${season}&week=${week}&entry=${encodeURIComponent(entryName)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setLineup(data.lineup ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setLineup([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [season, week, entryName]);
+
+  if (loading) return <div className="p-3 text-xs text-green-100/70">Loading lineup...</div>;
+  if (!lineup?.length) return <div className="p-3 text-xs text-green-100/70">No lineup data found for this entry.</div>;
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-white/15 bg-black/25 p-3">
+      <table className="w-full min-w-[560px] text-xs">
+        <thead>
+          <tr className="border-b border-white/20 text-left text-green-100">
+            <th className="py-1 pr-2">Slot</th>
+            <th className="py-1 pr-2">Player</th>
+            <th className="py-1 pr-2 text-right">Points</th>
+            <th className="py-1 pr-2 text-right">Rostered</th>
+            <th className="py-1 pr-2 text-right">FP Proj</th>
+            <th className="py-1 pr-2 text-right">FP Rank</th>
+            <th className="py-1 text-right">Injury</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lineup.map((player, index) => (
+            <tr key={`${player.playerName}-${index}`} className="border-b border-white/10">
+              <td className="py-1 pr-2 font-semibold text-green-100">{player.rosterPosition ?? "-"}</td>
+              <td className="py-1 pr-2 font-semibold text-white">{player.playerName}</td>
+              <td className="py-1 pr-2 text-right">{player.fieldPoints ?? "—"}</td>
+              <td className="py-1 pr-2 text-right">{player.draftedPct != null ? `${player.draftedPct.toFixed(1)}%` : "—"}</td>
+              <td className="py-1 pr-2 text-right">{player.fpProjection ?? "—"}</td>
+              <td className="py-1 pr-2 text-right">{player.fpEcrRank ?? "—"}</td>
+              <td className={`py-1 text-right ${injuryTagColor(player.injuryStatus)}`}>{player.injuryStatus ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WeekResultCard({ season, week, participantCount }: { season: number; week: number; participantCount: number }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const [summary, setSummary] = React.useState<WeeklyResultsSummary | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [openEntry, setOpenEntry] = React.useState<string | null>(null);
+
+  const toggleExpand = () => {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    setExpanded(true);
+    if (!summary) {
+      setLoading(true);
+      fetch(`/api/weekly-results?season=${season}&week=${week}`)
+        .then((res) => res.json())
+        .then((data) => setSummary(data.summary ?? null))
+        .finally(() => setLoading(false));
+    }
+  };
+
+  return (
+    <article className="rounded-lg border border-white/20 bg-black/20 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-bold text-white">Week {week}</div>
+          <div className="text-xs text-green-100/70">{participantCount} entries</div>
+        </div>
+        <button
+          type="button"
+          onClick={toggleExpand}
+          className="rounded-md border border-amber-300/50 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200 hover:bg-amber-400/20"
+        >
+          {expanded ? "Hide Details" : "Expand"}
+        </button>
+      </div>
+
+      {expanded && loading && <div className="mt-3 text-xs text-green-100/70">Loading week...</div>}
+
+      {expanded && summary && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {summary.mostRostered && (
+              <div className="rounded-md bg-white/5 p-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Most Rostered</div>
+                <div className="font-semibold text-white">{summary.mostRostered.playerName}</div>
+                <div className="text-[11px] text-green-100/70">{summary.mostRostered.value.toFixed(1)}% rostered</div>
+              </div>
+            )}
+            {summary.highestFieldScore && (
+              <div className="rounded-md bg-white/5 p-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Highest Field Score</div>
+                <div className="font-semibold text-white">{summary.highestFieldScore.playerName}</div>
+                <div className="text-[11px] text-green-100/70">{summary.highestFieldScore.value.toFixed(1)} pts</div>
+              </div>
+            )}
+            {summary.winningLineupEdge && (
+              <div className="rounded-md bg-white/5 p-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Winning Lineup Edge</div>
+                <div className="font-semibold text-white">{summary.winningLineupEdge.playerName}</div>
+                <div className="text-[11px] text-green-100/70">{summary.winningLineupEdge.value.toFixed(1)} pts</div>
+              </div>
+            )}
+            {summary.chalk && (
+              <div className="rounded-md bg-white/5 p-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Field Chalk</div>
+                <div className="font-semibold text-white">{summary.chalk.playerName}</div>
+                <div className="text-[11px] text-green-100/70">{summary.chalk.value.toFixed(1)}% rostered</div>
+              </div>
+            )}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-xs">
+              <thead>
+                <tr className="border-b border-white/20 text-left text-green-100">
+                  <th className="py-1 pr-2">Rank</th>
+                  <th className="py-1 pr-2">Entry</th>
+                  <th className="py-1 pr-2 text-right">Points</th>
+                  <th className="py-1 pr-2 text-right">Prize</th>
+                  <th className="py-1 text-right">Lineup</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.entries.map((entry) => (
+                  <React.Fragment key={entry.entryName}>
+                    <tr className="border-b border-white/10">
+                      <td className="py-1 pr-2 font-semibold text-white">{entry.rank ?? "-"}</td>
+                      <td className="py-1 pr-2 font-semibold text-green-50">{entry.entryName}</td>
+                      <td className="py-1 pr-2 text-right">{entry.points?.toFixed(2) ?? "—"}</td>
+                      <td className="py-1 pr-2 text-right">{entry.prize != null && entry.prize > 0 ? `$${entry.prize.toFixed(2)}` : "—"}</td>
+                      <td className="py-1 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setOpenEntry(openEntry === entry.entryName ? null : entry.entryName)}
+                          className="rounded border border-white/25 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-green-100 hover:bg-white/20"
+                        >
+                          {openEntry === entry.entryName ? "Hide Team" : "View Team"}
+                        </button>
+                      </td>
+                    </tr>
+                    {openEntry === entry.entryName && (
+                      <tr>
+                        <td colSpan={5} className="py-2">
+                          <EntryLineupPanel season={season} week={week} entryName={entry.entryName} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function WeeklyResultsView({ seasonYear }: { seasonYear: string }) {
+  const [weeks, setWeeks] = React.useState<WeeklyResultsListItem[] | null>(null);
+  const numericSeason = Number(seasonYear);
+  const hasValidSeason = Number.isFinite(numericSeason);
+
+  React.useEffect(() => {
+    if (!hasValidSeason) {
+      setWeeks([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/weekly-results?season=${numericSeason}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setWeeks(data.weeks ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setWeeks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasValidSeason, numericSeason]);
+
+  if (weeks === null) {
+    return <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center text-green-100">Loading weekly results...</div>;
+  }
+
+  if (!weeks.length) {
+    return (
+      <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center">
+        <h2 className="text-2xl font-extrabold text-white">No Weekly Results Yet</h2>
+        <p className="mt-3 text-green-100">
+          Once DK results are imported from the admin dashboard, each week&apos;s entries and lineups will show up here — drill into any
+          team to see the players they rostered, DK&apos;s field ownership, and (when available) the FantasyPros projection and injury
+          status heading into that game.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {weeks.map((item) => (
+        <WeekResultCard key={`${item.season}-${item.week}`} season={item.season} week={item.week} participantCount={item.participantCount} />
+      ))}
+    </div>
+  );
+}
+
 function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonRow[]; seasonLabel: string }) {
-  type SeasonPanel = "grid" | "statistics";
+  type SeasonPanel = "grid" | "statistics" | "results";
   type DisplayMode = "points" | "rank";
   const totalGridColumns = 23;
   const longestNameChars = React.useMemo(
@@ -611,6 +872,13 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
             className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${seasonPanel === "statistics" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-100 hover:bg-white/20"}`}
           >
             Statistics
+          </button>
+          <button
+            type="button"
+            onClick={() => setSeasonPanel("results")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${seasonPanel === "results" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Weekly Results
           </button>
           <div className="ml-2 flex items-center gap-1 rounded-md border border-white/25 bg-black/20 p-1">
             <button
@@ -793,6 +1061,11 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       {seasonPanel === "statistics" && (
         <div className="p-3">
           <StatisticsView rows={rows} seasonLabel={seasonLabel} />
+        </div>
+      )}
+      {seasonPanel === "results" && (
+        <div className="p-3">
+          <WeeklyResultsView seasonYear={seasonLabel} />
         </div>
       )}
     </section>
