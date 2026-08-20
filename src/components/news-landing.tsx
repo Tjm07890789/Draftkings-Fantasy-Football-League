@@ -49,10 +49,10 @@ export async function NewsLanding() {
             className="h-12 w-12 rounded-xl object-contain md:h-14 md:w-14"
             priority
           />
-          <h1 className="truncate text-lg font-bold tracking-wide md:text-2xl">DFS Football League</h1>
+          <h1 className="truncate text-lg font-bold tracking-wide md:text-2xl">DFS League</h1>
         </div>
 
-        <nav className="flex items-center gap-2">
+        <nav className="hidden items-center gap-2 md:flex">
           <Link
             href="/"
             className="rounded-md border border-emerald-300 bg-emerald-400/20 px-3 py-2 text-sm font-semibold text-emerald-100 transition"

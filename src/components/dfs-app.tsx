@@ -799,6 +799,255 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   );
 }
 
+const MY_NAME_KEY = "dfs_v1_my_name";
+const IDENTITY_DISMISSED_KEY = "dfs_v1_identity_dismissed";
+
+function seasonHasStarted(rows: SeasonRow[]): boolean {
+  return rows.some((row) => row.weeks.some((score) => score > 0));
+}
+
+function buildWeeklyRankMaps(rows: SeasonRow[], activeWeeks: number[]): Map<string, number>[] {
+  return activeWeeks.map((weekIndex) => {
+    const map = new Map<string, number>();
+    const ranked = rows
+      .map((row) => ({ name: row.name, score: row.weeks[weekIndex] ?? 0 }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => (b.score !== a.score ? b.score - a.score : a.name.localeCompare(b.name)));
+    ranked.forEach((entry, index) => map.set(entry.name, index + 1));
+    return map;
+  });
+}
+
+function buildWeeklyMedians(rows: SeasonRow[], activeWeeks: number[]): number[] {
+  return activeWeeks.map((weekIndex) => {
+    const scores = rows
+      .map((row) => row.weeks[weekIndex] ?? 0)
+      .filter((score) => score > 0)
+      .sort((a, b) => a - b);
+    if (!scores.length) return 0;
+    const mid = Math.floor(scores.length / 2);
+    return scores.length % 2 === 1 ? scores[mid] : (scores[mid - 1] + scores[mid]) / 2;
+  });
+}
+
+/** Weeks finished in the top 10, and the current active streak of weeks beating the field
+ *  median — cheap "badges" computed entirely from data already on the page. */
+function computeBadges(rows: SeasonRow[], name: string): { weeksInTop10: number; streak: number } {
+  const activeWeeks = Array.from(
+    { length: rows.reduce((max, row) => Math.max(max, row.weeks.filter((s) => s > 0).length), 0) },
+    (_, i) => i,
+  );
+  if (!activeWeeks.length) return { weeksInTop10: 0, streak: 0 };
+  const rankMaps = buildWeeklyRankMaps(rows, activeWeeks);
+  const medians = buildWeeklyMedians(rows, activeWeeks);
+  const row = rows.find((r) => r.name === name);
+  if (!row) return { weeksInTop10: 0, streak: 0 };
+
+  const weeksInTop10 = activeWeeks.filter((weekIndex) => (rankMaps[weekIndex].get(name) ?? 999) <= 10).length;
+
+  let streak = 0;
+  for (let i = activeWeeks.length - 1; i >= 0; i -= 1) {
+    const weekIndex = activeWeeks[i];
+    const score = row.weeks[weekIndex] ?? 0;
+    if (score <= 0) break;
+    if (score > (medians[weekIndex] ?? 0)) {
+      streak += 1;
+    } else {
+      break;
+    }
+  }
+
+  return { weeksInTop10, streak };
+}
+
+function findBestWeekEver(seasons: Record<string, SeasonRow[]>, name: string): { year: string; week: number; score: number } | null {
+  let best: { year: string; week: number; score: number } | null = null;
+  for (const [year, rows] of Object.entries(seasons)) {
+    const row = rows.find((r) => r.name === name);
+    if (!row) continue;
+    row.weeks.forEach((score, index) => {
+      if (score > 0 && (!best || score > best.score)) {
+        best = { year, week: index + 1, score };
+      }
+    });
+  }
+  return best;
+}
+
+function MyTeamBanner({
+  currentRows,
+  allSeasons,
+  currentSeasonYear,
+  myName,
+  onSetName,
+}: {
+  currentRows: SeasonRow[];
+  allSeasons: Record<string, SeasonRow[]>;
+  currentSeasonYear: string | null;
+  myName: string | null;
+  onSetName: (name: string | null) => void;
+}) {
+  const [dismissed, setDismissed] = React.useState(true);
+  const [picking, setPicking] = React.useState(false);
+
+  React.useEffect(() => {
+    setDismissed(window.localStorage.getItem(IDENTITY_DISMISSED_KEY) === "1");
+  }, []);
+
+  const allKnownNames = React.useMemo(() => {
+    const names = new Set<string>();
+    Object.values(allSeasons).forEach((rows) => rows.forEach((row) => names.add(row.name)));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [allSeasons]);
+
+  if (!myName) {
+    if (dismissed && !picking) return null;
+    return (
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-300/40 bg-emerald-400/10 px-4 py-3">
+        <span className="text-sm font-semibold text-emerald-100">👋 Which team is yours?</span>
+        <select
+          defaultValue=""
+          onChange={(event) => {
+            if (event.target.value) onSetName(event.target.value);
+          }}
+          className="rounded-md border border-white/25 bg-green-950/90 px-2 py-1.5 text-sm text-green-100"
+        >
+          <option value="" disabled>
+            Choose your name...
+          </option>
+          {allKnownNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => {
+            setDismissed(true);
+            setPicking(false);
+            window.localStorage.setItem(IDENTITY_DISMISSED_KEY, "1");
+          }}
+          className="ml-auto text-xs font-semibold text-green-100/70 hover:text-green-100"
+        >
+          Not now
+        </button>
+      </div>
+    );
+  }
+
+  const hasStarted = seasonHasStarted(currentRows);
+  const sorted = [...currentRows].sort((a, b) => b.total - a.total);
+  const myIndex = sorted.findIndex((row) => row.name === myName);
+  const bestWeek = findBestWeekEver(allSeasons, myName);
+  const badges = computeBadges(currentRows, myName);
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-emerald-300/40 bg-emerald-400/10 px-4 py-3 text-sm">
+      <span className="font-bold text-white">👋 {myName}</span>
+      {hasStarted && myIndex >= 0 ? (
+        myIndex === 0 ? (
+          <span className="font-semibold text-emerald-100">You&apos;re in 1st place! 🏆</span>
+        ) : (
+          <span className="font-semibold text-emerald-100">
+            #{myIndex + 1} — {(sorted[myIndex - 1].total - sorted[myIndex].total).toFixed(2)} pts behind {sorted[myIndex - 1].name} for #{myIndex}
+          </span>
+        )
+      ) : (
+        <span className="text-green-100/80">
+          {currentSeasonYear ?? "This"} season hasn&apos;t kicked off yet — check back once Week 1 scores are in.
+        </span>
+      )}
+      {hasStarted && badges.streak >= 2 && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-amber-200">🔥 {badges.streak}-week streak</span>}
+      {hasStarted && badges.weeksInTop10 > 0 && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-amber-200">
+          🏅 {badges.weeksInTop10} week{badges.weeksInTop10 === 1 ? "" : "s"} in Top 10
+        </span>
+      )}
+      {bestWeek && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-green-100/80">
+          Best week ever: {bestWeek.score.toFixed(2)} ({bestWeek.year} Wk {bestWeek.week})
+        </span>
+      )}
+      <button type="button" onClick={() => onSetName(null)} className="ml-auto text-xs font-semibold text-green-100/70 hover:text-green-100">
+        Not you?
+      </button>
+    </div>
+  );
+}
+
+function WeeklyStorylines({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
+  const activeWeeks = React.useMemo(
+    () => Array.from({ length: rows.reduce((max, row) => Math.max(max, row.weeks.filter((s) => s > 0).length), 0) }, (_, i) => i),
+    [rows],
+  );
+  const latestWeek = activeWeeks.length ? activeWeeks[activeWeeks.length - 1] : -1;
+
+  const storylines = React.useMemo(() => {
+    if (latestWeek < 0) return null;
+    const played = rows
+      .map((row) => ({ name: row.name, score: row.weeks[latestWeek] ?? 0 }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score);
+    if (!played.length) return null;
+
+    const high = played[0];
+    const low = played[played.length - 1];
+    let closestMargin: { a: string; b: string; gap: number } | null = null;
+    for (let i = 0; i < played.length - 1; i += 1) {
+      const gap = played[i].score - played[i + 1].score;
+      if (!closestMargin || gap < closestMargin.gap) {
+        closestMargin = { a: played[i].name, b: played[i + 1].name, gap };
+      }
+    }
+
+    const mover = ((): { name: string; delta: number } | null => {
+      if (latestWeek <= 0) return null;
+      const [prevRanks, curRanks] = buildWeeklyRankMaps(rows, [latestWeek - 1, latestWeek]);
+      const candidates: Array<{ name: string; delta: number }> = [];
+      curRanks.forEach((curRank, name) => {
+        const prevRank = prevRanks.get(name);
+        if (prevRank == null) return;
+        candidates.push({ name, delta: prevRank - curRank }); // positive = moved up
+      });
+      if (!candidates.length) return null;
+      return candidates.reduce((best, entry) => (entry.delta > best.delta ? entry : best));
+    })();
+
+    return { high, low, closestMargin, mover };
+  }, [latestWeek, rows]);
+
+  if (!storylines) return null;
+
+  return (
+    <div className="mb-3 rounded-xl border border-white/20 bg-black/20 px-4 py-3">
+      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-green-100">
+        Week {latestWeek + 1} Storylines — {seasonLabel}
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-green-50">
+        <span>
+          💰 High score: <strong className="text-white">{storylines.high.name}</strong> ({storylines.high.score.toFixed(2)})
+        </span>
+        <span>
+          🥶 Low score: <strong className="text-white">{storylines.low.name}</strong> ({storylines.low.score.toFixed(2)})
+        </span>
+        {storylines.closestMargin && (
+          <span>
+            🤏 Closest margin: <strong className="text-white">{storylines.closestMargin.a}</strong> over{" "}
+            <strong className="text-white">{storylines.closestMargin.b}</strong> by {storylines.closestMargin.gap.toFixed(2)}
+          </span>
+        )}
+        {storylines.mover && storylines.mover.delta !== 0 && (
+          <span>
+            {storylines.mover.delta > 0 ? "🔥" : "📉"} Biggest {storylines.mover.delta > 0 ? "riser" : "faller"}:{" "}
+            <strong className="text-white">{storylines.mover.name}</strong> ({formatSigned(storylines.mover.delta)} spots)
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DFSApp({ data }: { data: LeagueData }) {
   const [view, setView] = React.useState<View>("current");
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
@@ -809,6 +1058,22 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("home");
   const [mobileSelectedWeek, setMobileSelectedWeek] = React.useState<number>(-1); // -1 = latest week with data
   const [mounted, setMounted] = React.useState(false);
+  const [myName, setMyNameState] = React.useState<string | null>(null);
+
+  const setMyName = React.useCallback((name: string | null) => {
+    setMyNameState(name);
+    if (name) {
+      window.localStorage.setItem(MY_NAME_KEY, name);
+      window.localStorage.removeItem(IDENTITY_DISMISSED_KEY);
+    } else {
+      window.localStorage.removeItem(MY_NAME_KEY);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const saved = window.localStorage.getItem(MY_NAME_KEY);
+    if (saved) setMyNameState(saved);
+  }, []);
 
   // Detect viewport size and load saved preference
   React.useEffect(() => {
@@ -874,11 +1139,25 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
     if (savedView === "current" || savedView === "previous") {
       setView(savedView);
+      if (savedSeason && data.previousYears.includes(savedSeason)) {
+        setSelectedYear(savedSeason);
+      }
+      return;
+    }
+
+    // No saved preference yet: if the current season has no real scores in it (preseason),
+    // default to the most recent previous season's final standings instead of a wall of
+    // zeros — same real data, much better first impression for a fresh visitor.
+    if (!seasonHasStarted(currentRows) && data.previousYears.length) {
+      setSelectedYear(data.previousYears[0]);
+      setView("previous");
+      return;
     }
 
     if (savedSeason && data.previousYears.includes(savedSeason)) {
       setSelectedYear(savedSeason);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.previousYears]);
 
   React.useEffect(() => {
@@ -903,7 +1182,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
             className="h-12 w-12 rounded-xl object-contain md:h-14 md:w-14"
             priority
           />
-          <h1 className="truncate text-lg font-bold tracking-wide md:text-2xl">DFS Football League</h1>
+          <h1 className="truncate text-lg font-bold tracking-wide md:text-2xl">DFS League</h1>
         </div>
 
         <nav className="hidden items-center gap-2 lg:flex">
@@ -995,20 +1274,43 @@ export function DFSApp({ data }: { data: LeagueData }) {
         {/* Desktop-only main content - hidden on mobile */}
         {!isMobileView && (
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 md:p-3">
+          {view === "previous" && !seasonHasStarted(currentRows) && selectedYear === data.previousYears[0] && (
+            <div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-100">
+              🏈 {data.currentSeasonYear} season hasn&apos;t kicked off yet — showing how {selectedYear} finished.{" "}
+              <button type="button" onClick={() => setView("current")} className="underline hover:text-white">
+                View {data.currentSeasonYear} grid instead
+              </button>
+            </div>
+          )}
+
+          <MyTeamBanner
+            currentRows={currentRows}
+            allSeasons={data.seasons}
+            currentSeasonYear={data.currentSeasonYear}
+            myName={myName}
+            onSetName={setMyName}
+          />
+
           {view === "current" && (
-            <SeasonGrid
-              title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
-              rows={currentRows}
-              seasonLabel={data.currentSeasonYear ?? "Current Season"}
-            />
+            <>
+              <WeeklyStorylines rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Current Season"} />
+              <SeasonGrid
+                title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
+                rows={currentRows}
+                seasonLabel={data.currentSeasonYear ?? "Current Season"}
+              />
+            </>
           )}
 
           {view === "previous" && selectedYear && (
-            <SeasonGrid
-              title={`Previous Season Grid (${selectedYear})`}
-              rows={previousRows}
-              seasonLabel={selectedYear}
-            />
+            <>
+              <WeeklyStorylines rows={previousRows} seasonLabel={selectedYear} />
+              <SeasonGrid
+                title={`Previous Season Grid (${selectedYear})`}
+                rows={previousRows}
+                seasonLabel={selectedYear}
+              />
+            </>
           )}
         </main>
         )}
@@ -1108,6 +1410,19 @@ export function DFSApp({ data }: { data: LeagueData }) {
             {/* Home Tab - Quick Stats & Leaderboard */}
             {mobileTab === "home" && (
               <div className="space-y-4">
+                {view === "previous" && !seasonHasStarted(currentRows) && selectedYear === data.previousYears[0] && (
+                  <div className="rounded-xl border border-amber-300/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-100">
+                    🏈 {data.currentSeasonYear} season hasn&apos;t kicked off yet — showing how {selectedYear} finished.
+                  </div>
+                )}
+                <MyTeamBanner
+                  currentRows={currentRows}
+                  allSeasons={data.seasons}
+                  currentSeasonYear={data.currentSeasonYear}
+                  myName={myName}
+                  onSetName={setMyName}
+                />
+                <WeeklyStorylines rows={displayRows} seasonLabel={displaySeason ?? "Season"} />
                 <div className="rounded-xl bg-green-900/40 p-4">
                   <h3 className="mb-3 text-lg font-bold text-white">🏆 Week {activeWeek + 1} Leaders</h3>
                   <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
