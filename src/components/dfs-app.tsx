@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type View = "current" | "previous";
+type View = "current" | "previous" | "career";
 
 type SeasonRow = {
   name: string;
@@ -454,6 +454,403 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
           </div>
         </article>
       )}
+    </section>
+  );
+}
+
+type CareerPlayerStats = {
+  name: string;
+  seasonsPlayed: number;
+  weeksPlayed: number;
+  careerTotal: number;
+  careerAvg: number;
+  bestSeasonYear: string | null;
+  bestSeasonAvg: number;
+  bestWeekScore: number;
+  bestWeekYear: string | null;
+  bestWeekNumber: number | null;
+  consistency: number;
+  trend: "up" | "down" | "flat" | "new";
+  trendDelta: number;
+};
+
+function computeCareerStats(allSeasons: Record<string, SeasonRow[]>): CareerPlayerStats[] {
+  const years = Object.keys(allSeasons).sort((a, b) => Number(b) - Number(a));
+  const careerEntries = new Map<string, { year: string; score: number; week: number }[]>();
+  const seasonAvgByName = new Map<string, Map<string, number>>();
+
+  for (const year of years) {
+    for (const row of allSeasons[year] ?? []) {
+      const played = row.weeks
+        .map((score, weekIndex) => ({ score, week: weekIndex + 1 }))
+        .filter((entry) => entry.score > 0);
+      if (!played.length) continue;
+
+      if (!careerEntries.has(row.name)) careerEntries.set(row.name, []);
+      const list = careerEntries.get(row.name)!;
+      played.forEach((entry) => list.push({ year, score: entry.score, week: entry.week }));
+
+      if (!seasonAvgByName.has(row.name)) seasonAvgByName.set(row.name, new Map());
+      seasonAvgByName.get(row.name)!.set(year, mean(played.map((entry) => entry.score)));
+    }
+  }
+
+  const results: CareerPlayerStats[] = [];
+  for (const [name, entries] of careerEntries) {
+    const scores = entries.map((entry) => entry.score);
+    const seasonAvgs = seasonAvgByName.get(name)!;
+    const playedYears = years.filter((year) => seasonAvgs.has(year));
+
+    let bestSeasonYear: string | null = null;
+    let bestSeasonAvg = -Infinity;
+    for (const [year, avg] of seasonAvgs) {
+      if (avg > bestSeasonAvg) {
+        bestSeasonAvg = avg;
+        bestSeasonYear = year;
+      }
+    }
+
+    let bestWeekScore = 0;
+    let bestWeekYear: string | null = null;
+    let bestWeekNumber: number | null = null;
+    for (const entry of entries) {
+      if (entry.score > bestWeekScore) {
+        bestWeekScore = entry.score;
+        bestWeekYear = entry.year;
+        bestWeekNumber = entry.week;
+      }
+    }
+
+    let trend: CareerPlayerStats["trend"] = "new";
+    let trendDelta = 0;
+    if (playedYears.length >= 2) {
+      const mostRecent = seasonAvgs.get(playedYears[0])!;
+      const prior = seasonAvgs.get(playedYears[1])!;
+      trendDelta = mostRecent - prior;
+      trend = Math.abs(trendDelta) < 2 ? "flat" : trendDelta > 0 ? "up" : "down";
+    }
+
+    results.push({
+      name,
+      seasonsPlayed: playedYears.length,
+      weeksPlayed: scores.length,
+      careerTotal: Number.parseFloat(scores.reduce((sum, score) => sum + score, 0).toFixed(2)),
+      careerAvg: Number.parseFloat(mean(scores).toFixed(2)),
+      bestSeasonYear,
+      bestSeasonAvg: Number.parseFloat((bestSeasonAvg === -Infinity ? 0 : bestSeasonAvg).toFixed(2)),
+      bestWeekScore: Number.parseFloat(bestWeekScore.toFixed(2)),
+      bestWeekYear,
+      bestWeekNumber,
+      consistency: Number.parseFloat(stdDev(scores).toFixed(2)),
+      trend,
+      trendDelta: Number.parseFloat(trendDelta.toFixed(2)),
+    });
+  }
+  return results;
+}
+
+function computeHeadToHead(allSeasons: Record<string, SeasonRow[]>, playerA: string, playerB: string) {
+  let winsA = 0;
+  let winsB = 0;
+  let ties = 0;
+  let sharedWeeks = 0;
+  let bestMarginA = { value: 0, year: "", week: 0 };
+  let bestMarginB = { value: 0, year: "", week: 0 };
+  const scoresA: number[] = [];
+  const scoresB: number[] = [];
+
+  for (const [year, rows] of Object.entries(allSeasons)) {
+    const rowA = rows.find((row) => row.name === playerA);
+    const rowB = rows.find((row) => row.name === playerB);
+    if (!rowA || !rowB) continue;
+    const weekCount = Math.max(rowA.weeks.length, rowB.weeks.length);
+    for (let week = 0; week < weekCount; week++) {
+      const scoreA = rowA.weeks[week] ?? 0;
+      const scoreB = rowB.weeks[week] ?? 0;
+      if (scoreA <= 0 || scoreB <= 0) continue;
+      sharedWeeks += 1;
+      scoresA.push(scoreA);
+      scoresB.push(scoreB);
+      const margin = scoreA - scoreB;
+      if (margin > 0) {
+        winsA += 1;
+        if (margin > bestMarginA.value) bestMarginA = { value: margin, year, week: week + 1 };
+      } else if (margin < 0) {
+        winsB += 1;
+        if (-margin > bestMarginB.value) bestMarginB = { value: -margin, year, week: week + 1 };
+      } else {
+        ties += 1;
+      }
+    }
+  }
+
+  return {
+    winsA,
+    winsB,
+    ties,
+    sharedWeeks,
+    bestMarginA,
+    bestMarginB,
+    avgA: mean(scoresA),
+    avgB: mean(scoresB),
+  };
+}
+
+function trendGlyph(trend: CareerPlayerStats["trend"]) {
+  if (trend === "up") return { icon: "↑", className: "text-emerald-300" };
+  if (trend === "down") return { icon: "↓", className: "text-rose-300" };
+  if (trend === "flat") return { icon: "→", className: "text-green-100/70" };
+  return { icon: "✦", className: "text-amber-200" };
+}
+
+function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[]> }) {
+  type CareerSubview = "leaderboard" | "head-to-head";
+  type CareerSortColumn = "name" | "seasonsPlayed" | "weeksPlayed" | "careerTotal" | "careerAvg" | "bestSeasonAvg" | "bestWeekScore" | "consistency";
+
+  const [subview, setSubview] = React.useState<CareerSubview>("leaderboard");
+  const [sortColumn, setSortColumn] = React.useState<CareerSortColumn>("careerAvg");
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
+  const [playerA, setPlayerA] = React.useState("");
+  const [playerB, setPlayerB] = React.useState("");
+
+  const careerStats = React.useMemo(() => computeCareerStats(allSeasons), [allSeasons]);
+
+  const sortedStats = React.useMemo(() => {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    return [...careerStats].sort((a, b) => {
+      if (sortColumn === "name") return a.name.localeCompare(b.name) * direction;
+      return (a[sortColumn] - b[sortColumn]) * direction;
+    });
+  }, [careerStats, sortColumn, sortDirection]);
+
+  const handleSort = (column: CareerSortColumn) => {
+    if (column === sortColumn) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortColumn(column);
+    setSortDirection(column === "name" ? "asc" : "desc");
+  };
+
+  const sortLabel = (column: CareerSortColumn) => (column === sortColumn ? (sortDirection === "asc" ? " ↑" : " ↓") : "");
+
+  const qualified = careerStats.filter((stat) => stat.weeksPlayed >= 10);
+
+  const hallOfFame = React.useMemo(() => {
+    if (!careerStats.length) return null;
+    const bestWeekEver = [...careerStats].sort((a, b) => b.bestWeekScore - a.bestWeekScore)[0];
+    const bestCareerAvg = [...(qualified.length ? qualified : careerStats)].sort((a, b) => b.careerAvg - a.careerAvg)[0];
+    const mostDurable = [...careerStats].sort((a, b) => b.weeksPlayed - a.weeksPlayed)[0];
+    const mostConsistent = qualified.length ? [...qualified].sort((a, b) => a.consistency - b.consistency)[0] : null;
+    const mostImproved = [...careerStats].filter((s) => s.trend === "up").sort((a, b) => b.trendDelta - a.trendDelta)[0] ?? null;
+    return { bestWeekEver, bestCareerAvg, mostDurable, mostConsistent, mostImproved };
+  }, [careerStats, qualified]);
+
+  const allNames = React.useMemo(() => [...careerStats].map((stat) => stat.name).sort((a, b) => a.localeCompare(b)), [careerStats]);
+  const h2h = playerA && playerB && playerA !== playerB ? computeHeadToHead(allSeasons, playerA, playerB) : null;
+
+  if (!careerStats.length) {
+    return (
+      <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center">
+        <h2 className="text-2xl font-extrabold text-white">No Career Data Yet</h2>
+        <p className="mt-3 text-green-100">Once a season has real weekly scores, all-time stats will show up here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="w-full space-y-4 rounded-xl border border-white/30 bg-green-950/65 p-4 shadow-xl shadow-black/25 md:max-h-[calc(100vh-7rem)] md:overflow-auto">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-wide text-white">🏆 All-Time Stats</h2>
+          <p className="text-sm text-green-100">Across every season in the books — {careerStats.length} players, {Object.keys(allSeasons).length} seasons tracked</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSubview("leaderboard")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${subview === "leaderboard" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Leaderboard
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubview("head-to-head")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${subview === "head-to-head" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Head-to-Head
+          </button>
+        </div>
+      </div>
+
+      {hallOfFame && (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <div className="rounded-lg bg-white/5 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Best Week Ever</div>
+            <div className="font-bold text-white">{hallOfFame.bestWeekEver.name}</div>
+            <div className="text-[11px] text-green-100/70">
+              {formatCell(hallOfFame.bestWeekEver.bestWeekScore)} pts ({hallOfFame.bestWeekEver.bestWeekYear} Wk {hallOfFame.bestWeekEver.bestWeekNumber})
+            </div>
+          </div>
+          <div className="rounded-lg bg-white/5 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Best Career Avg</div>
+            <div className="font-bold text-white">{hallOfFame.bestCareerAvg.name}</div>
+            <div className="text-[11px] text-green-100/70">{formatCell(hallOfFame.bestCareerAvg.careerAvg)} pts/wk</div>
+          </div>
+          <div className="rounded-lg bg-white/5 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Most Durable</div>
+            <div className="font-bold text-white">{hallOfFame.mostDurable.name}</div>
+            <div className="text-[11px] text-green-100/70">{hallOfFame.mostDurable.weeksPlayed} weeks played</div>
+          </div>
+          {hallOfFame.mostConsistent && (
+            <div className="rounded-lg bg-white/5 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Most Consistent</div>
+              <div className="font-bold text-white">{hallOfFame.mostConsistent.name}</div>
+              <div className="text-[11px] text-green-100/70">±{formatCell(hallOfFame.mostConsistent.consistency)} std dev</div>
+            </div>
+          )}
+          {hallOfFame.mostImproved && (
+            <div className="rounded-lg bg-white/5 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Most Improved</div>
+              <div className="font-bold text-white">{hallOfFame.mostImproved.name}</div>
+              <div className="text-[11px] text-emerald-300">{formatSigned(hallOfFame.mostImproved.trendDelta)} pts/wk YoY</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {subview === "leaderboard" && (
+        <div className="overflow-x-auto rounded-lg border border-white/20 bg-black/20">
+          <table className="w-full min-w-[860px] text-xs">
+            <thead>
+              <tr className="border-b border-white/20 text-left text-green-100">
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2">#</th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2">
+                  <button type="button" onClick={() => handleSort("name")}>Player{sortLabel("name")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("seasonsPlayed")}>Seasons{sortLabel("seasonsPlayed")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("weeksPlayed")}>Weeks{sortLabel("weeksPlayed")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("careerTotal")}>Career Total{sortLabel("careerTotal")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("careerAvg")}>Career Avg{sortLabel("careerAvg")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("bestSeasonAvg")}>Best Season{sortLabel("bestSeasonAvg")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("bestWeekScore")}>Best Week{sortLabel("bestWeekScore")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">
+                  <button type="button" onClick={() => handleSort("consistency")}>Consistency{sortLabel("consistency")}</button>
+                </th>
+                <th className="sticky top-0 bg-green-950/95 px-2 py-2 text-right">Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedStats.map((stat, index) => {
+                const glyph = trendGlyph(stat.trend);
+                return (
+                  <tr key={stat.name} className="border-b border-white/10">
+                    <td className="px-2 py-1.5 text-right tabular-nums text-green-100/70">{index + 1}</td>
+                    <td className="px-2 py-1.5 font-semibold text-white">{stat.name}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{stat.seasonsPlayed}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{stat.weeksPlayed}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{formatCell(stat.careerTotal)}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{formatCell(stat.careerAvg)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatCell(stat.bestSeasonAvg)} <span className="text-green-100/60">({stat.bestSeasonYear})</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatCell(stat.bestWeekScore)} <span className="text-green-100/60">({stat.bestWeekYear} Wk {stat.bestWeekNumber})</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">±{formatCell(stat.consistency)}</td>
+                    <td className={`px-2 py-1.5 text-right font-bold ${glyph.className}`}>{glyph.icon}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {subview === "head-to-head" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-white/20 bg-black/20 p-3">
+            <select
+              value={playerA}
+              onChange={(event) => setPlayerA(event.target.value)}
+              className="rounded-md border border-white/25 bg-green-950/90 px-2 py-1.5 text-sm text-green-100"
+            >
+              <option value="">Player A...</option>
+              {allNames.map((name) => (
+                <option key={`a-${name}`} value={name} disabled={name === playerB}>{name}</option>
+              ))}
+            </select>
+            <span className="font-bold text-green-100/70">vs</span>
+            <select
+              value={playerB}
+              onChange={(event) => setPlayerB(event.target.value)}
+              className="rounded-md border border-white/25 bg-green-950/90 px-2 py-1.5 text-sm text-green-100"
+            >
+              <option value="">Player B...</option>
+              {allNames.map((name) => (
+                <option key={`b-${name}`} value={name} disabled={name === playerA}>{name}</option>
+              ))}
+            </select>
+          </div>
+
+          {h2h && (
+            <div className="rounded-lg border border-white/20 bg-black/20 p-4">
+              {h2h.sharedWeeks === 0 ? (
+                <p className="text-green-100">{playerA} and {playerB} have never played the same week in a shared season.</p>
+              ) : (
+                <>
+                  <div className="mb-3 text-center">
+                    <div className="text-xs uppercase tracking-wide text-green-100/70">Simulated Record (higher score wins the week)</div>
+                    <div className="text-2xl font-extrabold text-white">
+                      {playerA} {h2h.winsA} — {h2h.winsB} {playerB}
+                      {h2h.ties > 0 && <span className="text-green-100/60 text-base"> ({h2h.ties} tied)</span>}
+                    </div>
+                    <div className="text-xs text-green-100/70">{h2h.sharedWeeks} shared weeks</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-md bg-white/5 p-3 text-center">
+                      <div className="font-bold text-white">{playerA}</div>
+                      <div className="text-xs text-green-100/70">Avg in shared weeks: {formatCell(h2h.avgA)}</div>
+                      {h2h.bestMarginA.value > 0 && (
+                        <div className="text-xs text-emerald-300">
+                          Biggest win: +{formatCell(h2h.bestMarginA.value)} ({h2h.bestMarginA.year} Wk {h2h.bestMarginA.week})
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-md bg-white/5 p-3 text-center">
+                      <div className="font-bold text-white">{playerB}</div>
+                      <div className="text-xs text-green-100/70">Avg in shared weeks: {formatCell(h2h.avgB)}</div>
+                      {h2h.bestMarginB.value > 0 && (
+                        <div className="text-xs text-emerald-300">
+                          Biggest win: +{formatCell(h2h.bestMarginB.value)} ({h2h.bestMarginB.year} Wk {h2h.bestMarginB.week})
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="text-[11px] text-green-100/60">
+        Built from season weekly-total scores. Once weekly DK results start importing this season, this page can grow
+        roster-level analytics too (chalk vs. contrarian tendency, most-used players, ROI) — matching the golf site&apos;s
+        Advanced Stats page.
+      </p>
     </section>
   );
 }
@@ -1472,6 +1869,13 @@ export function DFSApp({ data }: { data: LeagueData }) {
           >
             Current Year
           </button>
+          <button
+            type="button"
+            onClick={() => setView("career")}
+            className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${view === "career" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-50 hover:bg-white/20"}`}
+          >
+            🏆 All-Time Stats
+          </button>
 
           <details className="group relative">
             <summary className="cursor-pointer list-none rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-green-50 transition hover:bg-white/20 [&::-webkit-details-marker]:hidden">
@@ -1556,13 +1960,15 @@ export function DFSApp({ data }: { data: LeagueData }) {
             </div>
           )}
 
-          <MyTeamBanner
-            currentRows={currentRows}
-            allSeasons={data.seasons}
-            currentSeasonYear={data.currentSeasonYear}
-            myName={myName}
-            onSetName={setMyName}
-          />
+          {view !== "career" && (
+            <MyTeamBanner
+              currentRows={currentRows}
+              allSeasons={data.seasons}
+              currentSeasonYear={data.currentSeasonYear}
+              myName={myName}
+              onSetName={setMyName}
+            />
+          )}
 
           {view === "current" && (
             <>
@@ -1585,6 +1991,8 @@ export function DFSApp({ data }: { data: LeagueData }) {
               />
             </>
           )}
+
+          {view === "career" && <CareerStatsView allSeasons={data.seasons} />}
         </main>
         )}
 
@@ -1727,7 +2135,11 @@ export function DFSApp({ data }: { data: LeagueData }) {
             )}
 
             {/* Stats Tab - Card Grid */}
-            {mobileTab === "stats" && (
+            {mobileTab === "stats" && view === "career" && (
+              <CareerStatsView allSeasons={data.seasons} />
+            )}
+
+            {mobileTab === "stats" && view !== "career" && (
               <div className="space-y-3">
                 <div className="mb-2 text-center text-sm text-green-200">{displaySeason} Season - Ranked by Total</div>
                 <div className="rounded-lg bg-white/5 px-3 py-2 text-center text-xs text-green-100/85">
@@ -1791,6 +2203,16 @@ export function DFSApp({ data }: { data: LeagueData }) {
             {/* More Tab - Year Selection */}
             {mobileTab === "more" && (
               <div className="space-y-4">
+                <div className="rounded-xl bg-green-900/40 p-4">
+                  <button
+                    type="button"
+                    onClick={() => { setView("career"); setMobileTab("stats"); }}
+                    className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
+                  >
+                    🏆 All-Time Stats
+                  </button>
+                </div>
+
                 <div className="rounded-xl bg-green-900/40 p-4">
                   <h3 className="mb-3 font-bold text-white">📅 Previous Seasons</h3>
                   <div className="space-y-2">
