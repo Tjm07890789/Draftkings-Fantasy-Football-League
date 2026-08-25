@@ -95,7 +95,7 @@ export async function NewsLanding() {
             <div className="self-start rounded-2xl border border-white/15 bg-black/15 px-3 py-2 shadow-lg shadow-black/20">
               <div className="flex items-center gap-2">
                 <p className="text-[0.56rem] font-semibold uppercase tracking-[0.16em] text-green-100/65">Powered by</p>
-                <img src="/TJMbot.jpg" alt="TJMbot logo" className="w-[2.9rem] object-contain md:w-[3.2rem]" />
+                <img src="/tjm-dev-logo.png" alt="TJM Dev logo" className="h-4 w-auto object-contain md:h-[1.1rem]" />
               </div>
             </div>
           </div>
