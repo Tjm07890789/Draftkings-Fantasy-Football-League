@@ -662,7 +662,7 @@ function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[
     <section className="w-full space-y-4 rounded-xl border border-white/30 bg-green-950/65 p-4 shadow-xl shadow-black/25 md:max-h-[calc(100vh-7rem)] md:overflow-auto">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-wide text-white">🏆 All-Time Stats</h2>
+          <h2 className="text-3xl font-extrabold tracking-wide text-white">All-Time Stats</h2>
           <p className="text-sm text-green-100">Across every season in the books — {careerStats.length} players, {Object.keys(allSeasons).length} seasons tracked</p>
         </div>
         <div className="flex items-center gap-2">
@@ -1099,9 +1099,9 @@ function WeeklyResultsView({ seasonYear }: { seasonYear: string }) {
       <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center">
         <h2 className="text-2xl font-extrabold text-white">No Weekly Results Yet</h2>
         <p className="mt-3 text-green-100">
-          Once DK results are imported from the admin dashboard, each week&apos;s entries and lineups will show up here — drill into any
-          team to see the players they rostered, DK&apos;s field ownership, and (when available) the FantasyPros projection and injury
-          status heading into that game.
+          Weekly results for this season haven&apos;t been posted yet. Once they are, each week&apos;s entries and lineups will show
+          up here — drill into any team to see the players they rostered, DK&apos;s field ownership, and (when available) the
+          FantasyPros projection and injury status heading into that game.
         </p>
       </div>
     );
@@ -1132,6 +1132,33 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const [seasonPanel, setSeasonPanel] = React.useState<SeasonPanel>("grid");
   const [displayMode, setDisplayMode] = React.useState<DisplayMode>("points");
+  const [weeklyResultsAvailable, setWeeklyResultsAvailable] = React.useState(false);
+
+  React.useEffect(() => {
+    const numericSeason = Number(seasonLabel);
+    if (!Number.isFinite(numericSeason)) {
+      setWeeklyResultsAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/weekly-results?season=${numericSeason}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setWeeklyResultsAvailable((data.weeks ?? []).length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setWeeklyResultsAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [seasonLabel]);
+
+  React.useEffect(() => {
+    if (!weeklyResultsAvailable && seasonPanel === "results") {
+      setSeasonPanel("grid");
+    }
+  }, [weeklyResultsAvailable, seasonPanel]);
 
   const weekRanksByName = React.useMemo(() => {
     const map = new Map<string, (number | null)[]>();
@@ -1270,13 +1297,15 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
           >
             Statistics
           </button>
-          <button
-            type="button"
-            onClick={() => setSeasonPanel("results")}
-            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${seasonPanel === "results" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-100 hover:bg-white/20"}`}
-          >
-            Weekly Results
-          </button>
+          {weeklyResultsAvailable && (
+            <button
+              type="button"
+              onClick={() => setSeasonPanel("results")}
+              className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${seasonPanel === "results" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-100 hover:bg-white/20"}`}
+            >
+              Weekly Results
+            </button>
+          )}
           <div className="ml-2 flex items-center gap-1 rounded-md border border-white/25 bg-black/20 p-1">
             <button
               type="button"
@@ -1474,6 +1503,43 @@ const IDENTITY_DISMISSED_KEY = "dfs_v1_identity_dismissed";
 
 function seasonHasStarted(rows: SeasonRow[]): boolean {
   return rows.some((row) => row.weeks.some((score) => score > 0));
+}
+
+function PreseasonEmptyState({
+  currentSeasonYear,
+  previousYear,
+  onViewPrevious,
+  onViewCareer,
+}: {
+  currentSeasonYear: string | null;
+  previousYear: string | null;
+  onViewPrevious: () => void;
+  onViewCareer: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center">
+      <h2 className="text-2xl font-extrabold text-white">{currentSeasonYear ?? "This"} Season Hasn&apos;t Started Yet</h2>
+      <p className="mt-3 text-green-100">Scores will show up here once Week 1 games are played.</p>
+      {previousYear && (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={onViewPrevious}
+            className="rounded-md border border-emerald-300 bg-emerald-400/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/30"
+          >
+            View {previousYear} Instead
+          </button>
+          <button
+            type="button"
+            onClick={onViewCareer}
+            className="rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-green-100 transition hover:bg-white/20"
+          >
+            All-Time Stats
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function buildWeeklyRankMaps(rows: SeasonRow[], activeWeeks: number[]): Map<string, number>[] {
@@ -1874,7 +1940,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
             onClick={() => setView("career")}
             className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${view === "career" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/25 bg-white/10 text-green-50 hover:bg-white/20"}`}
           >
-            🏆 All-Time Stats
+            All-Time Stats
           </button>
 
           <details className="group relative">
@@ -1925,7 +1991,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                 : "border-white/25 bg-white/10 text-green-50 hover:bg-white/20"
             }`}
           >
-            📱 Mobile
+            Mobile
           </button>
           <button
             type="button"
@@ -1936,7 +2002,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                 : "border-white/25 bg-white/10 text-green-50 hover:bg-white/20"
             }`}
           >
-            💻 Desktop
+            Desktop
           </button>
         </div>
 
@@ -1970,7 +2036,16 @@ export function DFSApp({ data }: { data: LeagueData }) {
             />
           )}
 
-          {view === "current" && (
+          {view === "current" && !seasonHasStarted(currentRows) && (
+            <PreseasonEmptyState
+              currentSeasonYear={data.currentSeasonYear}
+              previousYear={data.previousYears[0] ?? null}
+              onViewPrevious={() => { setSelectedYear(data.previousYears[0]); setView("previous"); }}
+              onViewCareer={() => setView("career")}
+            />
+          )}
+
+          {view === "current" && seasonHasStarted(currentRows) && (
             <>
               <WeeklyStorylines rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Current Season"} />
               <SeasonGrid
@@ -1998,7 +2073,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
         {/* Mobile Tab Content */}
         {isMobileView && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-20 pt-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-28 pt-4">
             {/* Season/Week Context Header - Left/Right tap for week nav */}
             <div className="mb-4 rounded-xl bg-green-800/50 p-2">
               {/* Year Selector */}
@@ -2103,34 +2178,45 @@ export function DFSApp({ data }: { data: LeagueData }) {
                   myName={myName}
                   onSetName={setMyName}
                 />
-                <WeeklyStorylines rows={displayRows} seasonLabel={displaySeason ?? "Season"} />
-                <div className="rounded-xl bg-green-900/40 p-4">
-                  <h3 className="mb-3 text-lg font-bold text-white">🏆 Week {activeWeek + 1} Leaders</h3>
-                  <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
-                    {displayRows
-                      .slice()
-                      .sort((a, b) => (b.weeks[activeWeek] || 0) - (a.weeks[activeWeek] || 0))
-                      .map((row, i) => (
-                      <div key={row.name} className="flex items-center justify-between rounded-lg bg-white/5 p-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                            i === 0 ? "bg-yellow-500 text-black" : i === 1 ? "bg-gray-400 text-black" : i === 2 ? "bg-orange-600 text-white" : "bg-white/20 text-white"
-                          }`}>{i + 1}</span>
-                          <span className="text-sm font-medium text-green-50">{row.name}</span>
-                        </div>
-                        <span className="font-mono text-sm font-bold text-green-400">{row.weeks[activeWeek] || 0} pts</span>
+                {view === "current" && !seasonHasStarted(currentRows) ? (
+                  <PreseasonEmptyState
+                    currentSeasonYear={data.currentSeasonYear}
+                    previousYear={data.previousYears[0] ?? null}
+                    onViewPrevious={() => { setSelectedYear(data.previousYears[0]); setView("previous"); }}
+                    onViewCareer={() => { setView("career"); setMobileTab("stats"); }}
+                  />
+                ) : (
+                  <>
+                    <WeeklyStorylines rows={displayRows} seasonLabel={displaySeason ?? "Season"} />
+                    <div className="rounded-xl bg-green-900/40 p-4">
+                      <h3 className="mb-3 text-lg font-bold text-white">Week {activeWeek + 1} Leaders</h3>
+                      <div className="space-y-2 pr-1">
+                        {displayRows
+                          .slice()
+                          .sort((a, b) => (b.weeks[activeWeek] || 0) - (a.weeks[activeWeek] || 0))
+                          .map((row, i) => (
+                          <div key={row.name} className="flex items-center justify-between rounded-lg bg-white/5 p-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                                i === 0 ? "bg-yellow-500 text-black" : i === 1 ? "bg-gray-400 text-black" : i === 2 ? "bg-orange-600 text-white" : "bg-white/20 text-white"
+                              }`}>{i + 1}</span>
+                              <span className="text-sm font-medium text-green-50">{row.name}</span>
+                            </div>
+                            <span className="font-mono text-sm font-bold text-green-400">{row.weeks[activeWeek] || 0} pts</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={() => { setMobileTab("stats"); }}
-                  className="w-full rounded-xl bg-green-600 py-3 font-bold text-white transition hover:bg-green-500"
-                >
-                  View Full Stats →
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMobileTab("stats"); }}
+                      className="w-full rounded-xl bg-green-600 py-3 font-bold text-white transition hover:bg-green-500"
+                    >
+                      View Full Stats →
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -2139,7 +2225,16 @@ export function DFSApp({ data }: { data: LeagueData }) {
               <CareerStatsView allSeasons={data.seasons} />
             )}
 
-            {mobileTab === "stats" && view !== "career" && (
+            {mobileTab === "stats" && view === "current" && !seasonHasStarted(currentRows) && (
+              <PreseasonEmptyState
+                currentSeasonYear={data.currentSeasonYear}
+                previousYear={data.previousYears[0] ?? null}
+                onViewPrevious={() => { setSelectedYear(data.previousYears[0]); setView("previous"); }}
+                onViewCareer={() => setView("career")}
+              />
+            )}
+
+            {mobileTab === "stats" && view !== "career" && !(view === "current" && !seasonHasStarted(currentRows)) && (
               <div className="space-y-3">
                 <div className="mb-2 text-center text-sm text-green-200">{displaySeason} Season - Ranked by Total</div>
                 <div className="rounded-lg bg-white/5 px-3 py-2 text-center text-xs text-green-100/85">
@@ -2176,7 +2271,16 @@ export function DFSApp({ data }: { data: LeagueData }) {
             )}
 
             {/* Standings Tab - Ranked List */}
-            {mobileTab === "standings" && (
+            {mobileTab === "standings" && view === "current" && !seasonHasStarted(currentRows) && (
+              <PreseasonEmptyState
+                currentSeasonYear={data.currentSeasonYear}
+                previousYear={data.previousYears[0] ?? null}
+                onViewPrevious={() => { setSelectedYear(data.previousYears[0]); setView("previous"); }}
+                onViewCareer={() => { setView("career"); setMobileTab("stats"); }}
+              />
+            )}
+
+            {mobileTab === "standings" && !(view === "current" && !seasonHasStarted(currentRows)) && (
               <div className="space-y-2">
                 <div className="mb-2 text-center text-sm text-green-200">{displaySeason} Season</div>
                 {displayRows
@@ -2209,12 +2313,12 @@ export function DFSApp({ data }: { data: LeagueData }) {
                     onClick={() => { setView("career"); setMobileTab("stats"); }}
                     className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
-                    🏆 All-Time Stats
+                    All-Time Stats
                   </button>
                 </div>
 
                 <div className="rounded-xl bg-green-900/40 p-4">
-                  <h3 className="mb-3 font-bold text-white">📅 Previous Seasons</h3>
+                  <h3 className="mb-3 font-bold text-white">Previous Seasons</h3>
                   <div className="space-y-2">
                     {Object.keys(data.seasons)
                       .filter(y => y !== data.currentSeasonYear)
@@ -2233,26 +2337,26 @@ export function DFSApp({ data }: { data: LeagueData }) {
                 </div>
                 
                 <div className="rounded-xl bg-green-900/40 p-4">
-                  <h3 className="mb-3 font-bold text-white">⚙️ Settings</h3>
+                  <h3 className="mb-3 font-bold text-white">Settings</h3>
                   <Link
                     href="/"
                     className="mb-2 block w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
-                    📰 Open DFS League News
+                    Open DFS League News
                   </Link>
                   <button
                     type="button"
                     onClick={() => setLayoutPreference("desktop")}
                     className="mb-2 w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
-                    💻 Switch to Desktop View
+                    Switch to Desktop View
                   </button>
                   <button
                     type="button"
                     onClick={() => setLayoutPreference("auto")}
                     className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
-                    📱 Use Auto Device Layout
+                    Use Auto Device Layout
                   </button>
                 </div>
               </div>
@@ -2266,34 +2370,30 @@ export function DFSApp({ data }: { data: LeagueData }) {
             <button
               type="button"
               onClick={() => setMobileTab("home")}
-              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "home" ? "text-green-400" : "text-green-100"}`}
+              className={`flex flex-col items-center justify-center rounded-lg px-4 py-2 ${mobileTab === "home" ? "text-green-400" : "text-green-100"}`}
             >
-              <span className="text-lg">🏠</span>
-              <span className="text-xs font-semibold">Home</span>
+              <span className="text-sm font-semibold">Home</span>
             </button>
             <button
               type="button"
               onClick={() => setMobileTab("stats")}
-              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "stats" ? "text-green-400" : "text-green-100"}`}
+              className={`flex flex-col items-center justify-center rounded-lg px-4 py-2 ${mobileTab === "stats" ? "text-green-400" : "text-green-100"}`}
             >
-              <span className="text-lg">📊</span>
-              <span className="text-xs font-semibold">Stats</span>
+              <span className="text-sm font-semibold">Stats</span>
             </button>
             <button
               type="button"
               onClick={() => setMobileTab("standings")}
-              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "standings" ? "text-green-400" : "text-green-100"}`}
+              className={`flex flex-col items-center justify-center rounded-lg px-4 py-2 ${mobileTab === "standings" ? "text-green-400" : "text-green-100"}`}
             >
-              <span className="text-lg">🏆</span>
-              <span className="text-xs font-semibold">Standings</span>
+              <span className="text-sm font-semibold">Standings</span>
             </button>
             <button
               type="button"
               onClick={() => setMobileTab("more")}
-              className={`flex flex-col items-center gap-1 rounded-lg px-4 py-2 ${mobileTab === "more" ? "text-green-400" : "text-green-100"}`}
+              className={`flex flex-col items-center justify-center rounded-lg px-4 py-2 ${mobileTab === "more" ? "text-green-400" : "text-green-100"}`}
             >
-              <span className="text-lg">📋</span>
-              <span className="text-xs font-semibold">More</span>
+              <span className="text-sm font-semibold">More</span>
             </button>
           </nav>
         )}

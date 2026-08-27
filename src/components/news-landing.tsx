@@ -7,14 +7,15 @@ export const dynamic = "force-dynamic";
 
 function formatDate(value: string | null) {
   if (!value) return "Draft";
-  return `${new Date(value).toLocaleString("en-US", {
+  return new Date(value).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
     timeZone: "America/New_York",
-  })} EST`;
+    timeZoneName: "short",
+  });
 }
 
 function getLatestPublishedAt(posts: DfsNewsPost[]) {
@@ -75,27 +76,21 @@ export async function NewsLanding() {
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-200/80">League Bulletin</p>
               <h2 className="mt-3 text-3xl font-extrabold tracking-wide text-white md:text-5xl">DFS League News</h2>
               <p className="mt-3 max-w-3xl text-sm text-green-100/80 md:text-base">
-                Updates, announcements, rule clarifications, and league notes published from the DFS admin dashboard.
+                Updates, announcements, rule clarifications, and league notes for the season.
               </p>
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Link
                   href="/league"
                   className="rounded-xl border border-emerald-300 bg-emerald-400/20 px-4 py-3 text-center text-sm font-semibold text-emerald-50 transition hover:bg-emerald-400/30"
                 >
-                  Open League Dashboard
+                  Enter League
                 </Link>
                 <Link
                   href="/league?view=mobile"
-                  className="rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-center text-sm font-semibold text-green-50 transition hover:bg-white/20"
+                  className="text-center text-xs font-semibold text-green-100/60 underline underline-offset-2 transition hover:text-green-100 sm:ml-2"
                 >
-                  Open Mobile View
+                  Prefer the mobile layout?
                 </Link>
-              </div>
-            </div>
-            <div className="self-start rounded-2xl border border-white/15 bg-black/15 px-3 py-2 shadow-lg shadow-black/20">
-              <div className="flex items-center gap-2">
-                <p className="text-[0.56rem] font-semibold uppercase tracking-[0.16em] text-green-100/65">Powered by</p>
-                <img src="/tjm-dev-logo.png" alt="TJM Dev logo" className="h-4 w-auto object-contain md:h-[1.1rem]" />
               </div>
             </div>
           </div>
@@ -109,7 +104,7 @@ export async function NewsLanding() {
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-2xl font-bold text-white">{post.title}</h3>
-                <div className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#ffd700]">
+                <div className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
                   Last Updated {formatDate(post.updatedAt || post.publishedAt)}
                 </div>
               </div>
@@ -125,7 +120,7 @@ export async function NewsLanding() {
           <section className="rounded-2xl border border-white/20 bg-green-950/65 p-8 text-center shadow-lg shadow-black/20">
             <h3 className="text-2xl font-bold text-white">No News Yet</h3>
             <p className="mt-3 text-sm text-green-100/80 md:text-base">
-              Published posts from the dashboard will appear here automatically.
+              Published posts will appear here automatically.
             </p>
           </section>
         )}
@@ -133,6 +128,10 @@ export async function NewsLanding() {
         <div className="text-right text-xs font-semibold uppercase tracking-[0.18em] text-green-100/60">
           Last News Update: {latestPublishedAt ? formatDate(latestPublishedAt) : "No published posts yet"}
         </div>
+
+        <footer className="mt-4 border-t border-white/10 pt-4 text-center text-xs text-green-100/50">
+          Not affiliated with DraftKings. © TJMDev.
+        </footer>
       </main>
     </div>
   );
