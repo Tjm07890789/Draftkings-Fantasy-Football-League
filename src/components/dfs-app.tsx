@@ -1269,7 +1269,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
 
   return (
     <section
-      className="m-0 w-full max-w-full overflow-hidden rounded-xl border border-white/30 bg-green-950/65 p-0 shadow-xl shadow-black/25 md:h-full"
+      className="m-0 flex w-full max-w-full flex-col overflow-hidden rounded-xl border border-white/30 bg-green-950/65 p-0 shadow-xl shadow-black/25 md:h-full"
       style={
         {
           ["--rank-col-width" as string]: rankColWidth,
@@ -1278,7 +1278,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         } as React.CSSProperties
       }
     >
-      <div className="z-20 flex flex-wrap items-center justify-between gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
+      <div className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/20 bg-green-950/90 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-bold text-white md:text-base">{title}</h2>
         </div>
@@ -1326,7 +1326,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
         </div>
       </div>
       {seasonPanel === "grid" && (
-      <div className="overflow-y-auto" style={{ maxHeight: "70vh" }}>
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <Table className="table-fixed w-full max-w-none text-[0.55rem]">
           <TableHeader>
             <TableRow className="h-7 border-b border-white/25 py-0 text-[0.8rem]">
