@@ -30,6 +30,7 @@ type LayoutPreference = "auto" | "mobile" | "desktop";
 type MobileTab = "home" | "stats" | "standings" | "more";
 
 const LAYOUT_PREF_KEY = "dfs_v1_layout_pref";
+const BANNERS_COLLAPSED_KEY = "dfs_v1_banners_collapsed";
 
 const NAV_COOKIE = "dfs_v1_last_nav";
 const SEASON_COOKIE = "dfs_v1_last_season";
@@ -1795,6 +1796,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const [mobileSelectedWeek, setMobileSelectedWeek] = React.useState<number>(-1); // -1 = latest week with data
   const [mounted, setMounted] = React.useState(false);
   const [myName, setMyNameState] = React.useState<string | null>(null);
+  const [bannersCollapsed, setBannersCollapsedState] = React.useState(false);
 
   const setMyName = React.useCallback((name: string | null) => {
     setMyNameState(name);
@@ -1806,9 +1808,15 @@ export function DFSApp({ data }: { data: LeagueData }) {
     }
   }, []);
 
+  const setBannersCollapsed = React.useCallback((collapsed: boolean) => {
+    setBannersCollapsedState(collapsed);
+    window.localStorage.setItem(BANNERS_COLLAPSED_KEY, collapsed ? "1" : "0");
+  }, []);
+
   React.useEffect(() => {
     const saved = window.localStorage.getItem(MY_NAME_KEY);
     if (saved) setMyNameState(saved);
+    setBannersCollapsedState(window.localStorage.getItem(BANNERS_COLLAPSED_KEY) === "1");
   }, []);
 
   // Detect viewport size and load saved preference
@@ -2027,6 +2035,17 @@ export function DFSApp({ data }: { data: LeagueData }) {
           )}
 
           {view !== "career" && (
+            <button
+              type="button"
+              onClick={() => setBannersCollapsed(!bannersCollapsed)}
+              className="mb-2 flex w-full items-center justify-between rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-green-100/70 transition hover:bg-white/10"
+            >
+              <span>{bannersCollapsed ? "Show Personalized Banners" : "Hide Personalized Banners"}</span>
+              <span>{bannersCollapsed ? "▸" : "▾"}</span>
+            </button>
+          )}
+
+          {view !== "career" && !bannersCollapsed && (
             <MyTeamBanner
               currentRows={currentRows}
               allSeasons={data.seasons}
@@ -2047,7 +2066,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
           {view === "current" && seasonHasStarted(currentRows) && (
             <>
-              <WeeklyStorylines rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Current Season"} />
+              {!bannersCollapsed && <WeeklyStorylines rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Current Season"} />}
               <SeasonGrid
                 title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
                 rows={currentRows}
@@ -2058,7 +2077,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
 
           {view === "previous" && selectedYear && (
             <>
-              <WeeklyStorylines rows={previousRows} seasonLabel={selectedYear} />
+              {!bannersCollapsed && <WeeklyStorylines rows={previousRows} seasonLabel={selectedYear} />}
               <SeasonGrid
                 title={`Previous Season Grid (${selectedYear})`}
                 rows={previousRows}
@@ -2171,13 +2190,23 @@ export function DFSApp({ data }: { data: LeagueData }) {
                     🏈 {data.currentSeasonYear} season hasn&apos;t kicked off yet — showing how {selectedYear} finished.
                   </div>
                 )}
-                <MyTeamBanner
-                  currentRows={currentRows}
-                  allSeasons={data.seasons}
-                  currentSeasonYear={data.currentSeasonYear}
-                  myName={myName}
-                  onSetName={setMyName}
-                />
+                <button
+                  type="button"
+                  onClick={() => setBannersCollapsed(!bannersCollapsed)}
+                  className="flex w-full items-center justify-between rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-green-100/70 transition hover:bg-white/10"
+                >
+                  <span>{bannersCollapsed ? "Show Personalized Banners" : "Hide Personalized Banners"}</span>
+                  <span>{bannersCollapsed ? "▸" : "▾"}</span>
+                </button>
+                {!bannersCollapsed && (
+                  <MyTeamBanner
+                    currentRows={currentRows}
+                    allSeasons={data.seasons}
+                    currentSeasonYear={data.currentSeasonYear}
+                    myName={myName}
+                    onSetName={setMyName}
+                  />
+                )}
                 {view === "current" && !seasonHasStarted(currentRows) ? (
                   <PreseasonEmptyState
                     currentSeasonYear={data.currentSeasonYear}
@@ -2187,7 +2216,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
                   />
                 ) : (
                   <>
-                    <WeeklyStorylines rows={displayRows} seasonLabel={displaySeason ?? "Season"} />
+                    {!bannersCollapsed && <WeeklyStorylines rows={displayRows} seasonLabel={displaySeason ?? "Season"} />}
                     <div className="rounded-xl bg-green-900/40 p-4">
                       <h3 className="mb-3 text-lg font-bold text-white">Week {activeWeek + 1} Leaders</h3>
                       <div className="space-y-2 pr-1">
