@@ -2,8 +2,35 @@ import { fetchPublishedNews } from "@/lib/dfs-news";
 import type { DfsNewsPost } from "@/lib/dfs-news";
 import Image from "next/image";
 import Link from "next/link";
+import { Fragment, type ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
+
+/** Turns any http(s) URL typed into a news post into a real clickable link. Trailing
+ *  sentence punctuation (a period ending the sentence, a closing paren, etc.) is kept out
+ *  of the link itself since it's essentially never part of the actual URL. */
+function linkifyText(text: string, keyPrefix: string): ReactNode[] {
+  const segments = text.split(/(https?:\/\/[^\s]+)/g);
+  return segments.map((segment, index) => {
+    if (index % 2 === 0) return segment; // plain text between links (or the whole string)
+    const trailingMatch = segment.match(/[.,;:!?)\]}'"]+$/);
+    const trailing = trailingMatch ? trailingMatch[0] : "";
+    const url = trailing ? segment.slice(0, -trailing.length) : segment;
+    return (
+      <Fragment key={`${keyPrefix}-${index}`}>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="break-all text-emerald-300 underline underline-offset-2 hover:text-emerald-200"
+        >
+          {url}
+        </a>
+        {trailing}
+      </Fragment>
+    );
+  });
+}
 
 function formatDate(value: string | null) {
   if (!value) return "Draft";
@@ -108,10 +135,12 @@ export async function NewsLanding() {
                   Last Updated {formatDate(post.updatedAt || post.publishedAt)}
                 </div>
               </div>
-              {post.summary ? <p className="mt-3 text-base text-green-100">{post.summary}</p> : null}
+              {post.summary ? (
+                <p className="mt-3 text-base text-green-100">{linkifyText(post.summary, `${post.id}-summary`)}</p>
+              ) : null}
               <div className="mt-4 space-y-4 text-sm leading-7 text-green-50/95 md:text-base">
                 {post.body.split(/\n{2,}/).map((paragraph, index) => (
-                  <p key={`${post.id}-paragraph-${index}`}>{paragraph}</p>
+                  <p key={`${post.id}-paragraph-${index}`}>{linkifyText(paragraph, `${post.id}-p${index}`)}</p>
                 ))}
               </div>
             </article>
