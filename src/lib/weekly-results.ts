@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { fetchAliasToNameMap, resolveOwnerName } from "./roster-crosswalk";
 
 export type WeeklyResultsListItem = {
   season: number;
@@ -11,11 +12,14 @@ export type WeeklyResultsListItem = {
 export type WeeklyResultEntry = {
   rank: number | null;
   entryName: string;
+  ownerName: string;
   points: number | null;
   prize: number | null;
 };
 
 export type WeeklyResultTile = { playerName: string; value: number } | null;
+
+export type WeeklyPrizeWinner = { winnerName: string; amount: number | null };
 
 export type WeeklyResultsSummary = {
   season: number;
@@ -29,6 +33,10 @@ export type WeeklyResultsSummary = {
   highestFieldScore: WeeklyResultTile;
   winningLineupEdge: WeeklyResultTile;
   chalk: WeeklyResultTile;
+  differentiator: WeeklyResultTile;
+  prizes: WeeklyPrizeWinner[];
+  narrativeOverride: string | null;
+  hasDkResults: boolean;
 };
 
 export type WeeklyResultLineupPlayer = {
@@ -57,39 +65,110 @@ function normalizeName(value: string): string {
     .trim();
 }
 
+/** football_weekly_prizes/football_weekly_narratives (admin-dashboard) are populated
+ *  before any DK results CSV import exists (Phase 1, 10 Sep 2026 plan) -- a week with only
+ *  a posted prize/recap and no DK import yet still needs to show up in the week list. */
+async function listPrizeOnlyWeeks(season?: number): Promise<WeeklyResultsListItem[]> {
+  const sql = getSql();
+  try {
+    const rows = season
+      ? await sql`
+          SELECT p.season, p.week, MAX(p.posted_at) AS posted_at
+          FROM football_weekly_prizes p
+          WHERE p.season = ${season}
+            AND NOT EXISTS (SELECT 1 FROM football_result_weeks w WHERE w.season = p.season AND w.week = p.week)
+          GROUP BY p.season, p.week
+        `
+      : await sql`
+          SELECT p.season, p.week, MAX(p.posted_at) AS posted_at
+          FROM football_weekly_prizes p
+          WHERE NOT EXISTS (SELECT 1 FROM football_result_weeks w WHERE w.season = p.season AND w.week = p.week)
+          GROUP BY p.season, p.week
+        `;
+    return (rows as any[]).map((row) => ({
+      season: Number(row.season),
+      week: Number(row.week),
+      participantCount: 0,
+      totalPrizes: null,
+      importedAt: row.posted_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function listFootballResultWeeks(season?: number): Promise<WeeklyResultsListItem[]> {
   const sql = getSql();
-  const rows = season
-    ? await sql`
-        SELECT season, week, participant_count, total_prizes, imported_at
-        FROM football_result_weeks
-        WHERE season = ${season}
-        ORDER BY week DESC
-      `
-    : await sql`
-        SELECT season, week, participant_count, total_prizes, imported_at
-        FROM football_result_weeks
-        ORDER BY season DESC, week DESC
-      `;
-  return (rows as any[]).map((row) => ({
+  const [dkRows, prizeOnlyWeeks] = await Promise.all([
+    season
+      ? sql`
+          SELECT season, week, participant_count, total_prizes, imported_at
+          FROM football_result_weeks
+          WHERE season = ${season}
+          ORDER BY week DESC
+        `
+      : sql`
+          SELECT season, week, participant_count, total_prizes, imported_at
+          FROM football_result_weeks
+          ORDER BY season DESC, week DESC
+        `,
+    listPrizeOnlyWeeks(season),
+  ]);
+  const dkWeeks = (dkRows as any[]).map((row) => ({
     season: Number(row.season),
     week: Number(row.week),
     participantCount: Number(row.participant_count ?? 0),
     totalPrizes: row.total_prizes == null ? null : Number(row.total_prizes),
     importedAt: row.imported_at,
   }));
+  return [...dkWeeks, ...prizeOnlyWeeks].sort((a, b) => (b.season - a.season) || (b.week - a.week));
+}
+
+async function fetchWeeklyPrizes(season: number, week: number): Promise<WeeklyPrizeWinner[]> {
+  const sql = getSql();
+  try {
+    const rows = await sql`SELECT winner_name, amount FROM football_weekly_prizes WHERE season = ${season} AND week = ${week} ORDER BY id ASC`;
+    return (rows as any[]).map((row) => ({ winnerName: row.winner_name, amount: row.amount == null ? null : Number(row.amount) }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchWeeklyNarrativeOverride(season: number, week: number): Promise<string | null> {
+  const sql = getSql();
+  try {
+    const rows = await sql`SELECT narrative_text FROM football_weekly_narratives WHERE season = ${season} AND week = ${week} LIMIT 1`;
+    return (rows as any[])[0]?.narrative_text ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchWeeklyResultsSummary(season: number, week: number): Promise<WeeklyResultsSummary | null> {
   const sql = getSql();
-  const weekRows = await sql`
-    SELECT id, entry_fee, gross_pool, total_prizes, participant_count
-    FROM football_result_weeks
-    WHERE season = ${season} AND week = ${week}
-    LIMIT 1
-  `;
+  const [weekRows, prizes, narrativeOverride] = await Promise.all([
+    sql`
+      SELECT id, entry_fee, gross_pool, total_prizes, participant_count
+      FROM football_result_weeks
+      WHERE season = ${season} AND week = ${week}
+      LIMIT 1
+    `,
+    fetchWeeklyPrizes(season, week),
+    fetchWeeklyNarrativeOverride(season, week),
+  ]);
   const weekRow = (weekRows as any[])[0];
-  if (!weekRow) return null;
+
+  if (!weekRow) {
+    // Phase 1: winners/recap can be posted before any DK results CSV is imported for this
+    // week -- surface a partial summary (no entries/tiles yet) instead of null so the week
+    // still shows up with its prize badges and owner-side narrative.
+    if (!prizes.length && !narrativeOverride) return null;
+    return {
+      season, week, entryFee: null, grossPool: null, totalPrizes: null, participantCount: 0,
+      entries: [], mostRostered: null, highestFieldScore: null, winningLineupEdge: null, chalk: null, differentiator: null,
+      prizes, narrativeOverride, hasDkResults: false,
+    };
+  }
   const weekId = weekRow.id;
 
   const entryRows = await sql`
@@ -98,9 +177,11 @@ export async function fetchWeeklyResultsSummary(season: number, week: number): P
     WHERE week_id = ${weekId}
     ORDER BY rank ASC NULLS LAST
   `;
+  const aliasMap = await fetchAliasToNameMap();
   const entries: WeeklyResultEntry[] = (entryRows as any[]).map((row) => ({
     rank: row.rank == null ? null : Number(row.rank),
     entryName: row.entry_name,
+    ownerName: resolveOwnerName(aliasMap, row.entry_name),
     points: row.points == null ? null : Number(row.points),
     prize: row.prize == null ? null : Number(row.prize),
   }));
@@ -151,6 +232,18 @@ export async function fetchWeeklyResultsSummary(season: number, week: number): P
     winningLineupEdge = best;
   }
 
+  // "Differentiator" -- the lowest-owned player among those who still put up a genuinely
+  // strong game (>= half the week's top score) -- the classic "who won it for someone"
+  // storyline, distinct from mostRostered/chalk (highest-owned) and highestFieldScore
+  // (which could just be a popular, high-owned stud).
+  const scoreThreshold = (highestScoreRow?.fantasy_points ?? 0) * 0.5;
+  const differentiatorRow = fieldStats.reduce<typeof fieldStats[number] | null>((best, row) => {
+    if (row.fantasy_points == null || row.drafted_pct == null) return best;
+    if (row.fantasy_points < scoreThreshold) return best;
+    if (!best || (best.drafted_pct ?? Infinity) > row.drafted_pct) return row;
+    return best;
+  }, null);
+
   return {
     season,
     week,
@@ -163,6 +256,10 @@ export async function fetchWeeklyResultsSummary(season: number, week: number): P
     highestFieldScore: highestScoreRow ? { playerName: highestScoreRow.player_name, value: highestScoreRow.fantasy_points ?? 0 } : null,
     winningLineupEdge,
     chalk: mostRosteredRow ? { playerName: mostRosteredRow.player_name, value: mostRosteredRow.drafted_pct ?? 0 } : null,
+    differentiator: differentiatorRow ? { playerName: differentiatorRow.player_name, value: differentiatorRow.fantasy_points ?? 0 } : null,
+    prizes,
+    narrativeOverride,
+    hasDkResults: true,
   };
 }
 

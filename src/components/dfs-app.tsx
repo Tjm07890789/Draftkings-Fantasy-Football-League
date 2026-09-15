@@ -99,7 +99,7 @@ function formatSigned(value: number) {
 }
 
 function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
-  type StatsSubview = "insights" | "weekly-ranks";
+  type StatsSubview = "insights" | "weekly-ranks" | "prizes" | "roster-tendencies" | "player-exposure";
   type RankSortColumn = "name" | "avgRank" | `week-${number}`;
   type RankSortDirection = "asc" | "desc";
 
@@ -296,6 +296,27 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
           >
             Weekly Rank Grid
           </button>
+          <button
+            type="button"
+            onClick={() => setStatsSubview("prizes")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${statsSubview === "prizes" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Prize Tracker
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatsSubview("roster-tendencies")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${statsSubview === "roster-tendencies" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Roster Tendencies
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatsSubview("player-exposure")}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${statsSubview === "player-exposure" ? "border-emerald-300 bg-emerald-400/20 text-emerald-100" : "border-white/20 bg-white/10 text-green-100 hover:bg-white/20"}`}
+          >
+            Player Exposure
+          </button>
         </div>
       </div>
 
@@ -455,7 +476,269 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
           </div>
         </article>
       )}
+
+      {statsSubview === "prizes" && <PrizeTrackerPanel rows={rows} seasonLabel={seasonLabel} />}
+      {statsSubview === "roster-tendencies" && <RosterTendenciesPanel seasonLabel={seasonLabel} />}
+      {statsSubview === "player-exposure" && <PlayerExposurePanel seasonLabel={seasonLabel} />}
     </section>
+  );
+}
+
+function PrizeTrackerPanel({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
+  const [prizeSummary, setPrizeSummary] = React.useState<OwnerPrizeSummary[] | null>(null);
+  const numericSeason = Number(seasonLabel);
+
+  React.useEffect(() => {
+    if (!Number.isFinite(numericSeason)) {
+      setPrizeSummary([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/weekly-prizes?season=${numericSeason}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setPrizeSummary(data.summary ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setPrizeSummary([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericSeason]);
+
+  const seasonPrizeStandingRank = React.useMemo(() => {
+    const sorted = [...rows].sort((a, b) => b.top10Avg - a.top10Avg);
+    return new Map(sorted.map((row, index) => [row.name, index + 1]));
+  }, [rows]);
+
+  const tableRows = React.useMemo(() => {
+    const byName = new Map((prizeSummary ?? []).map((p) => [p.winnerName, p]));
+    return rows
+      .map((row) => {
+        const prize = byName.get(row.name);
+        return {
+          name: row.name,
+          weeklyWins: prize?.weeklyWins ?? 0,
+          totalWon: prize?.totalWon ?? 0,
+          standing: seasonPrizeStandingRank.get(row.name) ?? null,
+        };
+      })
+      .sort((a, b) => b.totalWon - a.totalWon || b.weeklyWins - a.weeklyWins);
+  }, [rows, prizeSummary, seasonPrizeStandingRank]);
+
+  if (prizeSummary === null) {
+    return <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">Loading prize tracker...</div>;
+  }
+
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Prize Tracker</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">
+        Weekly high-score winners as posted by the admin, plus each owner&apos;s current Top-10-Week-Avg standing toward the
+        season-long prize.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[460px] text-xs">
+          <thead>
+            <tr className="border-b border-white/20 text-left text-green-100">
+              <th className="py-1 pr-2">Owner</th>
+              <th className="py-1 pr-2 text-right">Weekly Wins</th>
+              <th className="py-1 pr-2 text-right">Total $ Won</th>
+              <th className="py-1 text-right">Season-Prize Standing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.map((row) => (
+              <tr key={row.name} className="border-b border-white/10">
+                <td className="py-1 pr-2 font-semibold text-white">{row.name}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.weeklyWins}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.totalWon > 0 ? `$${row.totalWon.toFixed(2)}` : "—"}</td>
+                <td className="py-1 text-right tabular-nums">{row.standing != null ? `#${row.standing} (Top10 Avg)` : "—"}</td>
+              </tr>
+            ))}
+            {!tableRows.length && (
+              <tr>
+                <td colSpan={4} className="py-3 text-center text-green-100/70">
+                  No season data yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
+type RosterTendencyRow = {
+  ownerName: string;
+  avgFieldOwnership: number | null;
+  uniquePlayersUsed: number;
+  mostUsedPlayer: { name: string; count: number } | null;
+  bestWinningStreak: number;
+};
+
+/** Roster-construction tendencies per owner -- needs a real DK results import for the
+ *  season (Phase 2, 10 Sep 2026 plan). Modeled on the golf site's "Player Strategy
+ *  Tendencies" Advanced Stats section, adapted for football (no "made cut" concept, so
+ *  streak is tied to posted weekly wins instead). */
+function RosterTendenciesPanel({ seasonLabel }: { seasonLabel: string }) {
+  const [rows, setRows] = React.useState<RosterTendencyRow[] | null>(null);
+  const numericSeason = Number(seasonLabel);
+
+  React.useEffect(() => {
+    if (!Number.isFinite(numericSeason)) {
+      setRows([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/roster-stats?season=${numericSeason}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setRows(data.tendencies ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericSeason]);
+
+  if (rows === null) {
+    return <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">Loading roster tendencies...</div>;
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">
+        No DK results imported for this season yet -- once you import a week&apos;s contest-standings CSV, roster-construction
+        tendencies (field ownership, most-used players, winning streaks) will show up here.
+      </div>
+    );
+  }
+
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Roster Tendencies</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">
+        How each owner builds their roster this season -- lower avg field ownership means more contrarian picks.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-xs">
+          <thead>
+            <tr className="border-b border-white/20 text-left text-green-100">
+              <th className="py-1 pr-2">Owner</th>
+              <th className="py-1 pr-2 text-right">Avg Field Ownership</th>
+              <th className="py-1 pr-2 text-right">Unique Players Used</th>
+              <th className="py-1 pr-2 text-right">Most Used Player</th>
+              <th className="py-1 text-right">Best Winning Streak</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.ownerName} className="border-b border-white/10">
+                <td className="py-1 pr-2 font-semibold text-white">{row.ownerName}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.avgFieldOwnership != null ? `${row.avgFieldOwnership.toFixed(1)}%` : "—"}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.uniquePlayersUsed}</td>
+                <td className="py-1 pr-2 text-right">
+                  {row.mostUsedPlayer ? `${row.mostUsedPlayer.name} (${row.mostUsedPlayer.count})` : "—"}
+                </td>
+                <td className="py-1 text-right tabular-nums">{row.bestWinningStreak > 0 ? `${row.bestWinningStreak} wk` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
+type PlayerExposureRow = {
+  playerName: string;
+  appearances: number;
+  avgPoints: number | null;
+  bestWeek: number | null;
+  avgFieldRostered: number | null;
+  usedBy: Array<{ ownerName: string; count: number }>;
+};
+
+/** League-wide per-NFL-player exposure/trends for the season -- same Phase 2 DK-results
+ *  dependency as RosterTendenciesPanel. Modeled on the golf site's "Golfer Exposure and
+ *  Trends" Advanced Stats section. */
+function PlayerExposurePanel({ seasonLabel }: { seasonLabel: string }) {
+  const [rows, setRows] = React.useState<PlayerExposureRow[] | null>(null);
+  const numericSeason = Number(seasonLabel);
+
+  React.useEffect(() => {
+    if (!Number.isFinite(numericSeason)) {
+      setRows([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/roster-stats?season=${numericSeason}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setRows(data.exposure ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericSeason]);
+
+  if (rows === null) {
+    return <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">Loading player exposure...</div>;
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">
+        No DK results imported for this season yet -- once you import a week&apos;s contest-standings CSV, player exposure
+        (appearances, avg points, who used them) will show up here.
+      </div>
+    );
+  }
+
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Player Exposure &amp; Trends</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">
+        Season-long NFL player usage across every submitted lineup -- higher exposure usually means the league trusted that
+        player repeatedly.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-xs">
+          <thead>
+            <tr className="border-b border-white/20 text-left text-green-100">
+              <th className="py-1 pr-2">Player</th>
+              <th className="py-1 pr-2 text-right">Appearances</th>
+              <th className="py-1 pr-2 text-right">Avg Pts</th>
+              <th className="py-1 pr-2 text-right">Best Week</th>
+              <th className="py-1 pr-2 text-right">Avg Field Rostered</th>
+              <th className="py-1 text-right">Used By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 40).map((row) => (
+              <tr key={row.playerName} className="border-b border-white/10">
+                <td className="py-1 pr-2 font-semibold text-white">{row.playerName}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.appearances}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.avgPoints ?? "—"}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.bestWeek ?? "—"}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.avgFieldRostered != null ? `${row.avgFieldRostered.toFixed(1)}%` : "—"}</td>
+                <td className="py-1 text-right text-green-100/80">
+                  {row.usedBy.map((u) => `${u.ownerName} (${u.count})`).join(", ") || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
   );
 }
 
@@ -604,6 +887,130 @@ function trendGlyph(trend: CareerPlayerStats["trend"]) {
   return { icon: "✦", className: "text-amber-200" };
 }
 
+/** Per-owner career detail panel -- career totals (reuses the already-computed
+ *  CareerPlayerStats, no re-fetch needed), all-time Weekly Wins/$ Won (Phase 1 prize data),
+ *  and a season-by-season Top-10-Avg standing history. Reached by clicking a name on the
+ *  All-Time Leaderboard (10 Sep 2026 plan). */
+function PlayerDetailPanel({
+  ownerName,
+  allSeasons,
+  careerStat,
+  onClose,
+  onCompare,
+}: {
+  ownerName: string;
+  allSeasons: Record<string, SeasonRow[]>;
+  careerStat: CareerPlayerStats | null;
+  onClose: () => void;
+  onCompare: () => void;
+}) {
+  const [allTimePrizes, setAllTimePrizes] = React.useState<OwnerPrizeSummary | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setAllTimePrizes(null);
+    fetch(`/api/weekly-prizes?scope=all-time&owner=${encodeURIComponent(ownerName)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const weeks: Array<{ amount: number | null }> = data.weeks ?? [];
+        setAllTimePrizes({
+          winnerName: ownerName,
+          weeklyWins: weeks.length,
+          totalWon: weeks.reduce((sum, w) => sum + (w.amount ?? 0), 0),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setAllTimePrizes({ winnerName: ownerName, weeklyWins: 0, totalWon: 0 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerName]);
+
+  const seasonHistory = React.useMemo(() => {
+    return Object.entries(allSeasons)
+      .filter(([, rows]) => rows.some((row) => row.name === ownerName && row.weeks.some((score) => score > 0)))
+      .map(([year, rows]) => {
+        const sorted = [...rows].sort((a, b) => b.top10Avg - a.top10Avg);
+        const standing = sorted.findIndex((row) => row.name === ownerName) + 1;
+        const row = rows.find((r) => r.name === ownerName)!;
+        return { year, standing, fieldSize: rows.length, top10Avg: row.top10Avg, avgWeekly: row.avgWeekly };
+      })
+      .sort((a, b) => b.year.localeCompare(a.year));
+  }, [allSeasons, ownerName]);
+
+  if (!careerStat) return null;
+
+  return (
+    <div className="rounded-xl border border-emerald-300/40 bg-black/30 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-200">{ownerName} — Career Profile</h3>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onCompare} className="text-xs text-emerald-300 hover:text-emerald-100">
+            Compare in Head-to-Head →
+          </button>
+          <button type="button" onClick={onClose} className="text-xs text-green-100/70 hover:text-white">
+            Close ✕
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="rounded-md bg-white/5 p-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Career Avg</div>
+          <div className="font-bold text-white">{formatCell(careerStat.careerAvg)}</div>
+          <div className="text-[11px] text-green-100/70">{careerStat.seasonsPlayed} season(s), {careerStat.weeksPlayed} weeks</div>
+        </div>
+        <div className="rounded-md bg-white/5 p-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Best Season</div>
+          <div className="font-bold text-white">{formatCell(careerStat.bestSeasonAvg)}</div>
+          <div className="text-[11px] text-green-100/70">{careerStat.bestSeasonYear}</div>
+        </div>
+        <div className="rounded-md bg-white/5 p-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Best Week Ever</div>
+          <div className="font-bold text-white">{formatCell(careerStat.bestWeekScore)}</div>
+          <div className="text-[11px] text-green-100/70">{careerStat.bestWeekYear} Wk {careerStat.bestWeekNumber}</div>
+        </div>
+        <div className="rounded-md bg-white/5 p-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">All-Time Prizes</div>
+          {allTimePrizes === null ? (
+            <div className="text-[11px] text-green-100/70">Loading...</div>
+          ) : (
+            <>
+              <div className="font-bold text-white">{allTimePrizes.weeklyWins} weekly win{allTimePrizes.weeklyWins === 1 ? "" : "s"}</div>
+              <div className="text-[11px] text-green-100/70">{allTimePrizes.totalWon > 0 ? `$${allTimePrizes.totalWon.toFixed(2)} won` : "$0 won"}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[360px] text-xs">
+          <thead>
+            <tr className="border-b border-white/20 text-left text-green-100">
+              <th className="py-1 pr-2">Season</th>
+              <th className="py-1 pr-2 text-right">Season-Prize Standing</th>
+              <th className="py-1 pr-2 text-right">Top10 Avg</th>
+              <th className="py-1 text-right">Avg/Week</th>
+            </tr>
+          </thead>
+          <tbody>
+            {seasonHistory.map((entry) => (
+              <tr key={entry.year} className="border-b border-white/10">
+                <td className="py-1 pr-2 font-semibold text-white">{entry.year}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">#{entry.standing} of {entry.fieldSize}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{formatCell(entry.top10Avg)}</td>
+                <td className="py-1 text-right tabular-nums">{formatCell(entry.avgWeekly)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[]> }) {
   type CareerSubview = "leaderboard" | "head-to-head";
   type CareerSortColumn = "name" | "seasonsPlayed" | "weeksPlayed" | "careerTotal" | "careerAvg" | "bestSeasonAvg" | "bestWeekScore" | "consistency";
@@ -613,6 +1020,7 @@ function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const [playerA, setPlayerA] = React.useState("");
   const [playerB, setPlayerB] = React.useState("");
+  const [selectedDetailOwner, setSelectedDetailOwner] = React.useState<string | null>(null);
 
   const careerStats = React.useMemo(() => computeCareerStats(allSeasons), [allSeasons]);
 
@@ -759,7 +1167,15 @@ function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[
                 return (
                   <tr key={stat.name} className="border-b border-white/10">
                     <td className="px-2 py-1.5 text-right tabular-nums text-green-100/70">{index + 1}</td>
-                    <td className="px-2 py-1.5 font-semibold text-white">{stat.name}</td>
+                    <td className="px-2 py-1.5 font-semibold text-white">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetailOwner((prev) => (prev === stat.name ? null : stat.name))}
+                        className="underline decoration-dotted underline-offset-2 hover:text-emerald-200"
+                      >
+                        {stat.name}
+                      </button>
+                    </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{stat.seasonsPlayed}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{stat.weeksPlayed}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{formatCell(stat.careerTotal)}</td>
@@ -778,6 +1194,21 @@ function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[
             </tbody>
           </table>
         </div>
+      )}
+
+      {subview === "leaderboard" && selectedDetailOwner && (
+        <PlayerDetailPanel
+          ownerName={selectedDetailOwner}
+          allSeasons={allSeasons}
+          careerStat={careerStats.find((s) => s.name === selectedDetailOwner) ?? null}
+          onClose={() => setSelectedDetailOwner(null)}
+          onCompare={() => {
+            setPlayerA(selectedDetailOwner);
+            setPlayerB("");
+            setSelectedDetailOwner(null);
+            setSubview("head-to-head");
+          }}
+        />
       )}
 
       {subview === "head-to-head" && (
@@ -858,7 +1289,10 @@ function CareerStatsView({ allSeasons }: { allSeasons: Record<string, SeasonRow[
 
 type WeeklyResultsListItem = { season: number; week: number; participantCount: number; totalPrizes: number | null };
 type WeeklyResultTile = { playerName: string; value: number } | null;
-type WeeklyResultEntry = { rank: number | null; entryName: string; points: number | null; prize: number | null };
+type WeeklyResultEntry = { rank: number | null; entryName: string; ownerName: string; points: number | null; prize: number | null };
+type WeeklyPrizeWinner = { winnerName: string; amount: number | null };
+type OwnerPrizeSummary = { winnerName: string; weeklyWins: number; totalWon: number };
+
 type WeeklyResultsSummary = {
   season: number;
   week: number;
@@ -871,6 +1305,10 @@ type WeeklyResultsSummary = {
   highestFieldScore: WeeklyResultTile;
   winningLineupEdge: WeeklyResultTile;
   chalk: WeeklyResultTile;
+  differentiator: WeeklyResultTile;
+  prizes: WeeklyPrizeWinner[];
+  narrativeOverride: string | null;
+  hasDkResults: boolean;
 };
 type WeeklyResultLineupPlayer = {
   rosterPosition: string | null;
@@ -948,26 +1386,35 @@ function EntryLineupPanel({ season, week, entryName }: { season: number; week: n
   );
 }
 
-function WeekResultCard({ season, week, participantCount }: { season: number; week: number; participantCount: number }) {
+function WeekResultCard({ season, week, participantCount, rows }: { season: number; week: number; participantCount: number; rows: SeasonRow[] }) {
   const [expanded, setExpanded] = React.useState(false);
   const [summary, setSummary] = React.useState<WeeklyResultsSummary | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
   const [openEntry, setOpenEntry] = React.useState<string | null>(null);
 
-  const toggleExpand = () => {
-    if (expanded) {
-      setExpanded(false);
-      return;
-    }
-    setExpanded(true);
-    if (!summary) {
-      setLoading(true);
-      fetch(`/api/weekly-results?season=${season}&week=${week}`)
-        .then((res) => res.json())
-        .then((data) => setSummary(data.summary ?? null))
-        .finally(() => setLoading(false));
-    }
-  };
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/weekly-results?season=${season}&week=${week}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setSummary(data.summary ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [season, week]);
+
+  // Recap paragraph fetches eagerly (not gated behind Expand) since it's meant to be
+  // readable at a glance -- Expand still gates the heavier entries/lineup drill-down below.
+  const storylines = React.useMemo(() => computeWeekStorylines(rows, week - 1), [rows, week]);
+  const recapText = summary?.narrativeOverride?.trim() || buildWeeklyRecapText(storylines, summary);
 
   return (
     <article className="rounded-lg border border-white/20 bg-black/20 p-3">
@@ -978,16 +1425,39 @@ function WeekResultCard({ season, week, participantCount }: { season: number; we
         </div>
         <button
           type="button"
-          onClick={toggleExpand}
+          onClick={() => setExpanded((prev) => !prev)}
           className="rounded-md border border-amber-300/50 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200 hover:bg-amber-400/20"
         >
           {expanded ? "Hide Details" : "Expand"}
         </button>
       </div>
 
+      {summary && summary.prizes.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {summary.prizes.map((prize, index) => (
+            <span
+              key={`${prize.winnerName}-${index}`}
+              className="rounded-full border border-amber-300/50 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-200"
+            >
+              🏆 {prize.winnerName}
+              {prize.amount != null ? ` — $${prize.amount.toFixed(2)}` : ""}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {loading && <div className="mt-2 text-xs text-green-100/70">Loading recap...</div>}
+      {!loading && recapText && <p className="mt-2 text-xs italic leading-relaxed text-green-50/90">{recapText}</p>}
+
       {expanded && loading && <div className="mt-3 text-xs text-green-100/70">Loading week...</div>}
 
-      {expanded && summary && (
+      {expanded && !loading && summary && !summary.hasDkResults && (
+        <p className="mt-3 text-xs text-green-100/70">
+          No DK results imported for this week yet — once you do, entries, lineups, and player-level highlights will show up here.
+        </p>
+      )}
+
+      {expanded && summary?.hasDkResults && (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {summary.mostRostered && (
@@ -1036,7 +1506,7 @@ function WeekResultCard({ season, week, participantCount }: { season: number; we
                   <React.Fragment key={entry.entryName}>
                     <tr className="border-b border-white/10">
                       <td className="py-1 pr-2 font-semibold text-white">{entry.rank ?? "-"}</td>
-                      <td className="py-1 pr-2 font-semibold text-green-50">{entry.entryName}</td>
+                      <td className="py-1 pr-2 font-semibold text-green-50">{entry.ownerName}</td>
                       <td className="py-1 pr-2 text-right">{entry.points?.toFixed(2) ?? "—"}</td>
                       <td className="py-1 pr-2 text-right">{entry.prize != null && entry.prize > 0 ? `$${entry.prize.toFixed(2)}` : "—"}</td>
                       <td className="py-1 text-right">
@@ -1067,7 +1537,7 @@ function WeekResultCard({ season, week, participantCount }: { season: number; we
   );
 }
 
-function WeeklyResultsView({ seasonYear }: { seasonYear: string }) {
+function WeeklyResultsView({ seasonYear, rows }: { seasonYear: string; rows: SeasonRow[] }) {
   const [weeks, setWeeks] = React.useState<WeeklyResultsListItem[] | null>(null);
   const numericSeason = Number(seasonYear);
   const hasValidSeason = Number.isFinite(numericSeason);
@@ -1111,13 +1581,104 @@ function WeeklyResultsView({ seasonYear }: { seasonYear: string }) {
   return (
     <div className="space-y-3">
       {weeks.map((item) => (
-        <WeekResultCard key={`${item.season}-${item.week}`} season={item.season} week={item.week} participantCount={item.participantCount} />
+        <WeekResultCard key={`${item.season}-${item.week}`} season={item.season} week={item.week} participantCount={item.participantCount} rows={rows} />
       ))}
     </div>
   );
 }
 
-function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonRow[]; seasonLabel: string }) {
+/** Per-owner week-by-week log for one season -- Sheet data + posted prizes only, no DK
+ *  import dependency (Phase 1, 10 Sep 2026 plan). Reached by clicking an owner's name on
+ *  the season Grid. */
+function PlayerWeeklyResultsPanel({ ownerName, season, rows, onClose }: { ownerName: string; season: number; rows: SeasonRow[]; onClose: () => void }) {
+  const [ownerPrizes, setOwnerPrizes] = React.useState<Array<{ week: number; amount: number | null }> | null>(null);
+
+  React.useEffect(() => {
+    if (!Number.isFinite(season)) {
+      setOwnerPrizes([]);
+      return;
+    }
+    let cancelled = false;
+    setOwnerPrizes(null);
+    fetch(`/api/weekly-prizes?season=${season}&owner=${encodeURIComponent(ownerName)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setOwnerPrizes(data.weeks ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setOwnerPrizes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [season, ownerName]);
+
+  const row = rows.find((r) => r.name === ownerName);
+  const prizesByWeek = React.useMemo(() => new Map((ownerPrizes ?? []).map((p) => [p.week, p.amount])), [ownerPrizes]);
+
+  const weeklyEntries = React.useMemo(() => {
+    if (!row) return [];
+    return row.weeks
+      .map((score, index) => ({ week: index + 1, score }))
+      .filter((entry) => entry.score > 0)
+      .map((entry) => {
+        const fieldScores = rows.map((r) => r.weeks[entry.week - 1] ?? 0).filter((s) => s > 0).sort((a, b) => b - a);
+        return { ...entry, rank: fieldScores.indexOf(entry.score) + 1, wonAmount: prizesByWeek.get(entry.week) ?? null, won: prizesByWeek.has(entry.week) };
+      })
+      .reverse();
+  }, [row, rows, prizesByWeek]);
+
+  if (!row) return null;
+
+  return (
+    <div className="rounded-xl border border-emerald-300/40 bg-black/30 p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-200">
+          {ownerName} — {season} Weekly Log
+        </h3>
+        <button type="button" onClick={onClose} className="text-xs text-green-100/70 hover:text-white">
+          Close ✕
+        </button>
+      </div>
+      {ownerPrizes === null && <div className="text-xs text-green-100/70">Loading...</div>}
+      {ownerPrizes !== null && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[360px] text-xs">
+            <thead>
+              <tr className="border-b border-white/20 text-left text-green-100">
+                <th className="py-1 pr-2">Week</th>
+                <th className="py-1 pr-2 text-right">Score</th>
+                <th className="py-1 pr-2 text-right">Rank</th>
+                <th className="py-1 text-right">Prize</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeklyEntries.map((entry) => (
+                <tr key={entry.week} className="border-b border-white/10">
+                  <td className="py-1 pr-2 font-semibold text-white">Week {entry.week}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums">{entry.score.toFixed(2)}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums">#{entry.rank}</td>
+                  <td className="py-1 text-right">
+                    {entry.won ? `🏆${entry.wonAmount != null ? ` $${entry.wonAmount.toFixed(2)}` : ""}` : "—"}
+                  </td>
+                </tr>
+              ))}
+              {!weeklyEntries.length && (
+                <tr>
+                  <td colSpan={4} className="py-3 text-center text-green-100/70">
+                    No weeks played yet this season.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string; rows: SeasonRow[]; seasonLabel: string; initialPanel?: "grid" | "statistics" | "results" }) {
   type SeasonPanel = "grid" | "statistics" | "results";
   type DisplayMode = "points" | "rank";
   const totalGridColumns = 23;
@@ -1131,9 +1692,21 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>("total");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
-  const [seasonPanel, setSeasonPanel] = React.useState<SeasonPanel>("grid");
+  const [seasonPanel, setSeasonPanel] = React.useState<SeasonPanel>(initialPanel ?? "grid");
+  // Belt-and-suspenders alongside the useState initializer above: this component can be
+  // reachable via a parent state flip (e.g. "View Week 1 Results" from the preseason empty
+  // state) where React's reconciliation doesn't always guarantee the initializer re-runs,
+  // so explicitly sync whenever the caller's requested initial panel changes.
+  React.useEffect(() => {
+    if (initialPanel) setSeasonPanel(initialPanel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPanel]);
+  const [selectedOwnerName, setSelectedOwnerName] = React.useState<string | null>(null);
   const [displayMode, setDisplayMode] = React.useState<DisplayMode>("points");
-  const [weeklyResultsAvailable, setWeeklyResultsAvailable] = React.useState(false);
+  // null = not checked yet (distinct from a confirmed "no"), so the auto-reset guard below
+  // doesn't race the initialPanel="results" jump (fires synchronously on mount, before this
+  // effect's fetch has had a chance to resolve).
+  const [weeklyResultsAvailable, setWeeklyResultsAvailable] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
     const numericSeason = Number(seasonLabel);
@@ -1156,7 +1729,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
   }, [seasonLabel]);
 
   React.useEffect(() => {
-    if (!weeklyResultsAvailable && seasonPanel === "results") {
+    if (weeklyResultsAvailable === false && seasonPanel === "results") {
       setSeasonPanel("grid");
     }
   }, [weeklyResultsAvailable, seasonPanel]);
@@ -1419,7 +1992,13 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
                   title={row.name}
                 >
-                  <span className="block max-w-full whitespace-nowrap pl-1">{row.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOwnerName((prev) => (prev === row.name ? null : row.name))}
+                    className="block max-w-full whitespace-nowrap pl-1 text-left underline decoration-dotted underline-offset-2 hover:text-emerald-200"
+                  >
+                    {row.name}
+                  </button>
                 </TableCell>
                 {row.weeks.map((score, index) => (
                   <TableCell
@@ -1485,6 +2064,16 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
           <div>* {AVG_WEEKLY_HELP}</div>
         </div>
       )}
+      {seasonPanel === "grid" && selectedOwnerName && (
+        <div className="px-3 pb-3">
+          <PlayerWeeklyResultsPanel
+            ownerName={selectedOwnerName}
+            season={Number(seasonLabel)}
+            rows={rows}
+            onClose={() => setSelectedOwnerName(null)}
+          />
+        </div>
+      )}
       {seasonPanel === "statistics" && (
         <div className="p-3">
           <StatisticsView rows={rows} seasonLabel={seasonLabel} />
@@ -1492,7 +2081,7 @@ function SeasonGrid({ title, rows, seasonLabel }: { title: string; rows: SeasonR
       )}
       {seasonPanel === "results" && (
         <div className="p-3">
-          <WeeklyResultsView seasonYear={seasonLabel} />
+          <WeeklyResultsView seasonYear={seasonLabel} rows={rows} />
         </div>
       )}
     </section>
@@ -1511,34 +2100,74 @@ function PreseasonEmptyState({
   previousYear,
   onViewPrevious,
   onViewCareer,
+  onViewResults,
 }: {
   currentSeasonYear: string | null;
   previousYear: string | null;
   onViewPrevious: () => void;
   onViewCareer: () => void;
+  onViewResults?: () => void;
 }) {
+  // The Grid/Statistics tabs are driven by the Google Sheet's weekly totals, which can lag
+  // behind real DK results (e.g. a week imported before its Sheet score is entered) -- this
+  // checks the independent Weekly Results data source so real, already-imported weeks
+  // aren't hidden behind the "hasn't started" banner just because the Sheet isn't caught up.
+  const [hasWeeklyResults, setHasWeeklyResults] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!currentSeasonYear || !Number.isFinite(Number(currentSeasonYear))) return;
+    let cancelled = false;
+    fetch(`/api/weekly-results?season=${Number(currentSeasonYear)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setHasWeeklyResults((data.weeks ?? []).length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setHasWeeklyResults(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSeasonYear]);
+
   return (
     <div className="rounded-xl border border-white/25 bg-green-950/65 p-8 text-center">
       <h2 className="text-2xl font-extrabold text-white">{currentSeasonYear ?? "This"} Season Hasn&apos;t Started Yet</h2>
       <p className="mt-3 text-green-100">Scores will show up here once Week 1 games are played.</p>
-      {previousYear && (
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+      {hasWeeklyResults && (
+        <p className="mt-2 text-sm text-emerald-200">
+          Week 1 results are in, though — the season grid updates once the Google Sheet has this week&apos;s scores.
+        </p>
+      )}
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+        {hasWeeklyResults && onViewResults && (
           <button
             type="button"
-            onClick={onViewPrevious}
+            onClick={onViewResults}
             className="rounded-md border border-emerald-300 bg-emerald-400/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/30"
           >
-            View {previousYear} Instead
+            View Week 1 Results
           </button>
-          <button
-            type="button"
-            onClick={onViewCareer}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-green-100 transition hover:bg-white/20"
-          >
-            All-Time Stats
-          </button>
-        </div>
-      )}
+        )}
+        {previousYear && (
+          <>
+            <button
+              type="button"
+              onClick={onViewPrevious}
+              className="rounded-md border border-emerald-300 bg-emerald-400/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/30"
+            >
+              View {previousYear} Instead
+            </button>
+            <button
+              type="button"
+              onClick={onViewCareer}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-green-100 transition hover:bg-white/20"
+            >
+              All-Time Stats
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1713,6 +2342,89 @@ function MyTeamBanner({
   );
 }
 
+type WeekStorylines = {
+  high: { name: string; score: number };
+  low: { name: string; score: number };
+  closestMargin: { a: string; b: string; gap: number } | null;
+  mover: { name: string; delta: number } | null;
+};
+
+/** Owner-level highlights for one specific week (high/low score, closest margin between
+ *  two owners, biggest rank riser/faller vs. the prior week) -- pure Sheet-data math, no DK
+ *  import needed. Originally only ever computed for the latest week (WeeklyStorylines);
+ *  generalized so the Weekly Results page's per-week recap can use it for any past week too. */
+function computeWeekStorylines(rows: SeasonRow[], weekIndex: number): WeekStorylines | null {
+  if (weekIndex < 0) return null;
+  const played = rows
+    .map((row) => ({ name: row.name, score: row.weeks[weekIndex] ?? 0 }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (!played.length) return null;
+
+  const high = played[0];
+  const low = played[played.length - 1];
+  let closestMargin: { a: string; b: string; gap: number } | null = null;
+  for (let i = 0; i < played.length - 1; i += 1) {
+    const gap = played[i].score - played[i + 1].score;
+    if (!closestMargin || gap < closestMargin.gap) {
+      closestMargin = { a: played[i].name, b: played[i + 1].name, gap };
+    }
+  }
+
+  const mover = ((): { name: string; delta: number } | null => {
+    if (weekIndex <= 0) return null;
+    const [prevRanks, curRanks] = buildWeeklyRankMaps(rows, [weekIndex - 1, weekIndex]);
+    const candidates: Array<{ name: string; delta: number }> = [];
+    curRanks.forEach((curRank, name) => {
+      const prevRank = prevRanks.get(name);
+      if (prevRank == null) return;
+      candidates.push({ name, delta: prevRank - curRank }); // positive = moved up
+    });
+    if (!candidates.length) return null;
+    return candidates.reduce((best, entry) => (entry.delta > best.delta ? entry : best));
+  })();
+
+  return { high, low, closestMargin, mover };
+}
+
+/** Assembles the Weekly Results page's small recap paragraph from whatever's available for
+ *  that week -- owner-side facts (Sheet data, always there once the week's scores are in)
+ *  and, once a DK results CSV has been imported for that week, impact-player facts too.
+ *  Deterministic templates, no AI call, consistent with the rest of the site's stats. */
+function buildWeeklyRecapText(storylines: WeekStorylines | null, summary: WeeklyResultsSummary | null): string | null {
+  const sentences: string[] = [];
+
+  if (storylines) {
+    sentences.push(
+      `${storylines.high.name} posted the week's top score at ${storylines.high.score.toFixed(2)}, while ${storylines.low.name} brought up the rear at ${storylines.low.score.toFixed(2)}.`,
+    );
+    if (storylines.closestMargin) {
+      sentences.push(
+        `${storylines.closestMargin.a} narrowly edged ${storylines.closestMargin.b} by just ${storylines.closestMargin.gap.toFixed(2)} points.`,
+      );
+    }
+    if (storylines.mover && storylines.mover.delta !== 0) {
+      const verb = storylines.mover.delta > 0 ? "jumped" : "dropped";
+      const spots = Math.abs(storylines.mover.delta);
+      sentences.push(`${storylines.mover.name} was the week's biggest mover, ${verb} ${spots} spot${spots === 1 ? "" : "s"} in the standings.`);
+    }
+  }
+
+  if (summary?.hasDkResults) {
+    if (summary.highestFieldScore) {
+      sentences.push(`On the player side, ${summary.highestFieldScore.playerName} led all rosters with ${summary.highestFieldScore.value.toFixed(1)} points.`);
+    }
+    if (summary.differentiator && summary.differentiator.playerName !== summary.highestFieldScore?.playerName) {
+      sentences.push(`${summary.differentiator.playerName} was the week's differentiator — a big game that few in the field had.`);
+    }
+    if (summary.mostRostered) {
+      sentences.push(`${summary.mostRostered.playerName} was the most popular roster spot at ${summary.mostRostered.value.toFixed(1)}% owned.`);
+    }
+  }
+
+  return sentences.length ? sentences.join(" ") : null;
+}
+
 function WeeklyStorylines({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
   const activeWeeks = React.useMemo(
     () => Array.from({ length: rows.reduce((max, row) => Math.max(max, row.weeks.filter((s) => s > 0).length), 0) }, (_, i) => i),
@@ -1720,39 +2432,7 @@ function WeeklyStorylines({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabe
   );
   const latestWeek = activeWeeks.length ? activeWeeks[activeWeeks.length - 1] : -1;
 
-  const storylines = React.useMemo(() => {
-    if (latestWeek < 0) return null;
-    const played = rows
-      .map((row) => ({ name: row.name, score: row.weeks[latestWeek] ?? 0 }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score);
-    if (!played.length) return null;
-
-    const high = played[0];
-    const low = played[played.length - 1];
-    let closestMargin: { a: string; b: string; gap: number } | null = null;
-    for (let i = 0; i < played.length - 1; i += 1) {
-      const gap = played[i].score - played[i + 1].score;
-      if (!closestMargin || gap < closestMargin.gap) {
-        closestMargin = { a: played[i].name, b: played[i + 1].name, gap };
-      }
-    }
-
-    const mover = ((): { name: string; delta: number } | null => {
-      if (latestWeek <= 0) return null;
-      const [prevRanks, curRanks] = buildWeeklyRankMaps(rows, [latestWeek - 1, latestWeek]);
-      const candidates: Array<{ name: string; delta: number }> = [];
-      curRanks.forEach((curRank, name) => {
-        const prevRank = prevRanks.get(name);
-        if (prevRank == null) return;
-        candidates.push({ name, delta: prevRank - curRank }); // positive = moved up
-      });
-      if (!candidates.length) return null;
-      return candidates.reduce((best, entry) => (entry.delta > best.delta ? entry : best));
-    })();
-
-    return { high, low, closestMargin, mover };
-  }, [latestWeek, rows]);
+  const storylines = React.useMemo(() => computeWeekStorylines(rows, latestWeek), [latestWeek, rows]);
 
   if (!storylines) return null;
 
@@ -1788,6 +2468,7 @@ function WeeklyStorylines({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabe
 export function DFSApp({ data }: { data: LeagueData }) {
   const [view, setView] = React.useState<View>("current");
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
+  const [forceCurrentResults, setForceCurrentResults] = React.useState(false);
   
   // Mobile/Desktop layout state
   const [layoutPreference, setLayoutPreference] = React.useState<LayoutPreference>("auto");
@@ -2055,22 +2736,24 @@ export function DFSApp({ data }: { data: LeagueData }) {
             />
           )}
 
-          {view === "current" && !seasonHasStarted(currentRows) && (
+          {view === "current" && !seasonHasStarted(currentRows) && !forceCurrentResults && (
             <PreseasonEmptyState
               currentSeasonYear={data.currentSeasonYear}
               previousYear={data.previousYears[0] ?? null}
               onViewPrevious={() => { setSelectedYear(data.previousYears[0]); setView("previous"); }}
               onViewCareer={() => setView("career")}
+              onViewResults={() => setForceCurrentResults(true)}
             />
           )}
 
-          {view === "current" && seasonHasStarted(currentRows) && (
+          {view === "current" && (seasonHasStarted(currentRows) || forceCurrentResults) && (
             <>
-              {!bannersCollapsed && <WeeklyStorylines rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Current Season"} />}
+              {!bannersCollapsed && seasonHasStarted(currentRows) && <WeeklyStorylines rows={currentRows} seasonLabel={data.currentSeasonYear ?? "Current Season"} />}
               <SeasonGrid
                 title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
                 rows={currentRows}
                 seasonLabel={data.currentSeasonYear ?? "Current Season"}
+                initialPanel={!seasonHasStarted(currentRows) && forceCurrentResults ? "results" : "grid"}
               />
             </>
           )}
