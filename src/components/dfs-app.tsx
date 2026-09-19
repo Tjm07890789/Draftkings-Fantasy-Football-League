@@ -484,8 +484,14 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
   );
 }
 
+const WEEKLY_DK_ENTRY_FEE = 5;
+
+type PrizeTrackerSortColumn = "name" | "weeklyWins" | "totalWon" | "entryFees" | "netEarnings" | "standing";
+
 function PrizeTrackerPanel({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
   const [prizeSummary, setPrizeSummary] = React.useState<OwnerPrizeSummary[] | null>(null);
+  const [sortColumn, setSortColumn] = React.useState<PrizeTrackerSortColumn>("netEarnings");
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const numericSeason = Number(seasonLabel);
 
   React.useEffect(() => {
@@ -514,18 +520,39 @@ function PrizeTrackerPanel({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLab
 
   const tableRows = React.useMemo(() => {
     const byName = new Map((prizeSummary ?? []).map((p) => [p.winnerName, p]));
+    const direction = sortDirection === "asc" ? 1 : -1;
     return rows
       .map((row) => {
         const prize = byName.get(row.name);
+        const weeksEntered = row.weeks.filter((score) => score > 0).length;
+        const totalWon = prize?.totalWon ?? 0;
+        const entryFees = weeksEntered * WEEKLY_DK_ENTRY_FEE;
         return {
           name: row.name,
           weeklyWins: prize?.weeklyWins ?? 0,
-          totalWon: prize?.totalWon ?? 0,
+          totalWon,
+          entryFees,
+          netEarnings: Number((totalWon - entryFees).toFixed(2)),
           standing: seasonPrizeStandingRank.get(row.name) ?? null,
         };
       })
-      .sort((a, b) => b.totalWon - a.totalWon || b.weeklyWins - a.weeklyWins);
-  }, [rows, prizeSummary, seasonPrizeStandingRank]);
+      .sort((a, b) => {
+        if (sortColumn === "name") return a.name.localeCompare(b.name) * direction;
+        if (sortColumn === "standing") return ((a.standing ?? 0) - (b.standing ?? 0)) * direction;
+        return (a[sortColumn] - b[sortColumn]) * direction;
+      });
+  }, [rows, prizeSummary, seasonPrizeStandingRank, sortColumn, sortDirection]);
+
+  const handleSort = (column: PrizeTrackerSortColumn) => {
+    if (column === sortColumn) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortColumn(column);
+    setSortDirection(column === "name" ? "asc" : "desc");
+  };
+
+  const sortLabel = (column: PrizeTrackerSortColumn) => (column === sortColumn ? (sortDirection === "asc" ? " ↑" : " ↓") : "");
 
   if (prizeSummary === null) {
     return <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">Loading prize tracker...</div>;
@@ -535,17 +562,19 @@ function PrizeTrackerPanel({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLab
     <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
       <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Prize Tracker</h3>
       <p className="mb-3 text-[11px] text-green-100/70">
-        Weekly high-score winners as posted by the admin, plus each owner&apos;s current Top-10-Week-Avg standing toward the
-        season-long prize.
+        Weekly high-score winners as posted by the admin, net earnings after the ${WEEKLY_DK_ENTRY_FEE}/week DK entry fee, plus
+        each owner&apos;s current Top-10-Week-Avg standing toward the season-long prize.
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[460px] text-xs">
+        <table className="w-full min-w-[620px] text-xs">
           <thead>
             <tr className="border-b border-white/20 text-left text-green-100">
-              <th className="py-1 pr-2">Owner</th>
-              <th className="py-1 pr-2 text-right">Weekly Wins</th>
-              <th className="py-1 pr-2 text-right">Total $ Won</th>
-              <th className="py-1 text-right">Season-Prize Standing</th>
+              <th className="py-1 pr-2"><button type="button" onClick={() => handleSort("name")}>Owner{sortLabel("name")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("weeklyWins")}>Weekly Wins{sortLabel("weeklyWins")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("totalWon")}>Total $ Won{sortLabel("totalWon")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("entryFees")}>Entry Fees{sortLabel("entryFees")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("netEarnings")}>Net Earnings{sortLabel("netEarnings")}</button></th>
+              <th className="py-1 text-right"><button type="button" onClick={() => handleSort("standing")}>Season-Prize Standing{sortLabel("standing")}</button></th>
             </tr>
           </thead>
           <tbody>
@@ -554,12 +583,16 @@ function PrizeTrackerPanel({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLab
                 <td className="py-1 pr-2 font-semibold text-white">{row.name}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.weeklyWins}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.totalWon > 0 ? `$${row.totalWon.toFixed(2)}` : "—"}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{row.entryFees > 0 ? `$${row.entryFees.toFixed(2)}` : "—"}</td>
+                <td className={`py-1 pr-2 text-right font-semibold tabular-nums ${row.netEarnings > 0 ? "text-emerald-300" : row.netEarnings < 0 ? "text-rose-300" : ""}`}>
+                  {row.entryFees > 0 || row.totalWon > 0 ? `${row.netEarnings < 0 ? "-" : ""}$${Math.abs(row.netEarnings).toFixed(2)}` : "—"}
+                </td>
                 <td className="py-1 text-right tabular-nums">{row.standing != null ? `#${row.standing} (Top10 Avg)` : "—"}</td>
               </tr>
             ))}
             {!tableRows.length && (
               <tr>
-                <td colSpan={4} className="py-3 text-center text-green-100/70">
+                <td colSpan={6} className="py-3 text-center text-green-100/70">
                   No season data yet.
                 </td>
               </tr>
@@ -2080,7 +2113,7 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
         </div>
       )}
       {seasonPanel === "results" && (
-        <div className="p-3">
+        <div className="max-h-[calc(100vh-7rem)] overflow-y-auto p-3">
           <WeeklyResultsView seasonYear={seasonLabel} rows={rows} />
         </div>
       )}
