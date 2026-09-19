@@ -273,7 +273,7 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
   }
 
   return (
-    <section className="w-full space-y-4 rounded-xl border border-white/30 bg-green-950/65 p-4 shadow-xl shadow-black/25 md:max-h-[calc(100vh-7rem)] md:overflow-auto">
+    <section className="w-full space-y-4 rounded-xl border border-white/30 bg-green-950/65 p-4 shadow-xl shadow-black/25">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-3xl font-extrabold tracking-wide text-white">Statistics</h2>
@@ -2108,12 +2108,12 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
         </div>
       )}
       {seasonPanel === "statistics" && (
-        <div className="p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <StatisticsView rows={rows} seasonLabel={seasonLabel} />
         </div>
       )}
       {seasonPanel === "results" && (
-        <div className="max-h-[calc(100vh-7rem)] overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <WeeklyResultsView seasonYear={seasonLabel} rows={rows} />
         </div>
       )}
