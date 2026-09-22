@@ -2056,7 +2056,7 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
                     className="block max-w-full whitespace-nowrap pl-1 text-left underline decoration-dotted underline-offset-2 hover:text-emerald-200"
                   >
                     {row.name}
-                    {nameToAlias[row.name] && <span className="font-normal text-green-100/60"> ({nameToAlias[row.name]})</span>}
+                    {nameToAlias[row.name] && <span className="font-semibold text-amber-300"> ({nameToAlias[row.name]})</span>}
                   </button>
                 </TableCell>
                 {row.weeks.map((score, index) => (
