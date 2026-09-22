@@ -1922,6 +1922,24 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
           >
             Grid
           </button>
+          {seasonPanel === "grid" && (
+            <div className="flex items-center gap-1 rounded-md border border-white/25 bg-black/20 p-1">
+              <button
+                type="button"
+                onClick={() => setDisplayMode("points")}
+                className={`rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${displayMode === "points" ? "bg-emerald-400/20 text-emerald-100" : "text-green-100 hover:bg-white/15"}`}
+              >
+                Total Points
+              </button>
+              <button
+                type="button"
+                onClick={() => setDisplayMode("rank")}
+                className={`rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${displayMode === "rank" ? "bg-emerald-400/20 text-emerald-100" : "text-green-100 hover:bg-white/15"}`}
+              >
+                Week Rank
+              </button>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setSeasonPanel("statistics")}
@@ -1938,22 +1956,6 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
               Weekly Results
             </button>
           )}
-          <div className="ml-2 flex items-center gap-1 rounded-md border border-white/25 bg-black/20 p-1">
-            <button
-              type="button"
-              onClick={() => setDisplayMode("points")}
-              className={`rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${displayMode === "points" ? "bg-emerald-400/20 text-emerald-100" : "text-green-100 hover:bg-white/15"}`}
-            >
-              Total Points
-            </button>
-            <button
-              type="button"
-              onClick={() => setDisplayMode("rank")}
-              className={`rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition ${displayMode === "rank" ? "bg-emerald-400/20 text-emerald-100" : "text-green-100 hover:bg-white/15"}`}
-            >
-              Week Rank
-            </button>
-          </div>
           <span className="ml-1 text-sm font-semibold text-green-100">{rows.length} participants</span>
         </div>
       </div>
