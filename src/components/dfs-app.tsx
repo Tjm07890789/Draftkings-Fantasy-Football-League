@@ -1715,9 +1715,34 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
   type SeasonPanel = "grid" | "statistics" | "results";
   type DisplayMode = "points" | "rank";
   const totalGridColumns = 23;
+
+  const [nameToAlias, setNameToAlias] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/roster-aliases")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setNameToAlias(data.aliases ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setNameToAlias({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const displayName = React.useCallback(
+    (name: string) => {
+      const alias = nameToAlias[name];
+      return alias ? `${name} (${alias})` : name;
+    },
+    [nameToAlias],
+  );
+
   const longestNameChars = React.useMemo(
-    () => rows.reduce((max, row) => Math.max(max, row.name.length), 0),
-    [rows],
+    () => rows.reduce((max, row) => Math.max(max, displayName(row.name).length), 0),
+    [rows, displayName],
   );
   const rankColWidth = "44px";
   const nameColWidth = `${Math.max((longestNameChars + 2) * 10, 180)}px`;
@@ -2023,7 +2048,7 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
                 <TableCell
                   className="h-4 overflow-hidden border-r border-white/20 px-2 py-0 pl-2 text-[0.78rem] font-semibold whitespace-nowrap"
                   style={{ width: "var(--name-col-width)", minWidth: "var(--name-col-width)" }}
-                  title={row.name}
+                  title={displayName(row.name)}
                 >
                   <button
                     type="button"
@@ -2031,6 +2056,7 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
                     className="block max-w-full whitespace-nowrap pl-1 text-left underline decoration-dotted underline-offset-2 hover:text-emerald-200"
                   >
                     {row.name}
+                    {nameToAlias[row.name] && <span className="font-normal text-green-100/60"> ({nameToAlias[row.name]})</span>}
                   </button>
                 </TableCell>
                 {row.weeks.map((score, index) => (
