@@ -610,6 +610,7 @@ type RosterTendencyRow = {
   uniquePlayersUsed: number;
   mostUsedPlayer: { name: string; count: number } | null;
   bestWinningStreak: number;
+  avgValueFound: number | null;
 };
 
 /** Roster-construction tendencies per owner -- needs a real DK results import for the
@@ -656,13 +657,16 @@ function RosterTendenciesPanel({ seasonLabel }: { seasonLabel: string }) {
     <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
       <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Roster Tendencies</h3>
       <p className="mb-3 text-[11px] text-green-100/70">
-        How each owner builds their roster this season -- lower avg field ownership means more contrarian picks.
+        How each owner builds their roster this season -- Avg Value Found is points scored per $1,000 of salary spent across
+        their own picks, the clearest read on who's best at finding cheap production. Lower avg field ownership means more
+        contrarian picks.
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-xs">
+        <table className="w-full min-w-[620px] text-xs">
           <thead>
             <tr className="border-b border-white/20 text-left text-green-100">
               <th className="py-1 pr-2">Owner</th>
+              <th className="py-1 pr-2 text-right">Avg Value Found</th>
               <th className="py-1 pr-2 text-right">Avg Field Ownership</th>
               <th className="py-1 pr-2 text-right">Unique Players Used</th>
               <th className="py-1 pr-2 text-right">Most Used Player</th>
@@ -673,6 +677,7 @@ function RosterTendenciesPanel({ seasonLabel }: { seasonLabel: string }) {
             {rows.map((row) => (
               <tr key={row.ownerName} className="border-b border-white/10">
                 <td className="py-1 pr-2 font-semibold text-white">{row.ownerName}</td>
+                <td className="py-1 pr-2 text-right font-semibold tabular-nums text-amber-300">{row.avgValueFound != null ? `${row.avgValueFound.toFixed(2)} pts/$1K` : "—"}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.avgFieldOwnership != null ? `${row.avgFieldOwnership.toFixed(1)}%` : "—"}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.uniquePlayersUsed}</td>
                 <td className="py-1 pr-2 text-right">
@@ -694,14 +699,22 @@ type PlayerExposureRow = {
   avgPoints: number | null;
   bestWeek: number | null;
   avgFieldRostered: number | null;
+  avgValue: number | null;
+  bestValueWeek: number | null;
   usedBy: Array<{ ownerName: string; count: number }>;
 };
 
+type PlayerExposureSortColumn = "playerName" | "appearances" | "avgPoints" | "bestWeek" | "avgFieldRostered" | "avgValue" | "bestValueWeek";
+
 /** League-wide per-NFL-player exposure/trends for the season -- same Phase 2 DK-results
  *  dependency as RosterTendenciesPanel. Modeled on the golf site's "Golfer Exposure and
- *  Trends" Advanced Stats section. */
+ *  Trends" Advanced Stats section. Avg Value / Best Value Week (points per $1,000 salary)
+ *  answer "who are the top value plays this season" -- sortable so the best cost-efficient
+ *  performances are one click away. */
 function PlayerExposurePanel({ seasonLabel }: { seasonLabel: string }) {
   const [rows, setRows] = React.useState<PlayerExposureRow[] | null>(null);
+  const [sortColumn, setSortColumn] = React.useState<PlayerExposureSortColumn>("appearances");
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const numericSeason = Number(seasonLabel);
 
   React.useEffect(() => {
@@ -723,6 +736,25 @@ function PlayerExposurePanel({ seasonLabel }: { seasonLabel: string }) {
     };
   }, [numericSeason]);
 
+  const handleSort = (column: PlayerExposureSortColumn) => {
+    if (column === sortColumn) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortColumn(column);
+    setSortDirection(column === "playerName" ? "asc" : "desc");
+  };
+  const sortLabel = (column: PlayerExposureSortColumn) => (column === sortColumn ? (sortDirection === "asc" ? " ↑" : " ↓") : "");
+
+  const sortedRows = React.useMemo(() => {
+    if (!rows) return [];
+    const direction = sortDirection === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sortColumn === "playerName") return a.playerName.localeCompare(b.playerName) * direction;
+      return ((a[sortColumn] ?? -Infinity) - (b[sortColumn] ?? -Infinity)) * direction;
+    });
+  }, [rows, sortColumn, sortDirection]);
+
   if (rows === null) {
     return <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">Loading player exposure...</div>;
   }
@@ -740,29 +772,33 @@ function PlayerExposurePanel({ seasonLabel }: { seasonLabel: string }) {
     <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
       <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Player Exposure &amp; Trends</h3>
       <p className="mb-3 text-[11px] text-green-100/70">
-        Season-long NFL player usage across every submitted lineup -- higher exposure usually means the league trusted that
-        player repeatedly.
+        Season-long NFL player usage across every submitted lineup. Avg Value / Best Value Week are points scored per $1,000 of
+        DK salary -- click a header to sort, e.g. by Avg Value to find the season&apos;s best cheap-production plays.
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] text-xs">
+        <table className="w-full min-w-[680px] text-xs">
           <thead>
             <tr className="border-b border-white/20 text-left text-green-100">
-              <th className="py-1 pr-2">Player</th>
-              <th className="py-1 pr-2 text-right">Appearances</th>
-              <th className="py-1 pr-2 text-right">Avg Pts</th>
-              <th className="py-1 pr-2 text-right">Best Week</th>
-              <th className="py-1 pr-2 text-right">Avg Field Rostered</th>
+              <th className="py-1 pr-2"><button type="button" onClick={() => handleSort("playerName")}>Player{sortLabel("playerName")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("appearances")}>Appearances{sortLabel("appearances")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("avgPoints")}>Avg Pts{sortLabel("avgPoints")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("bestWeek")}>Best Week{sortLabel("bestWeek")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("avgFieldRostered")}>Avg Field Rostered{sortLabel("avgFieldRostered")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("avgValue")}>Avg Value{sortLabel("avgValue")}</button></th>
+              <th className="py-1 pr-2 text-right"><button type="button" onClick={() => handleSort("bestValueWeek")}>Best Value Week{sortLabel("bestValueWeek")}</button></th>
               <th className="py-1 text-right">Used By</th>
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 40).map((row) => (
+            {sortedRows.slice(0, 40).map((row) => (
               <tr key={row.playerName} className="border-b border-white/10">
                 <td className="py-1 pr-2 font-semibold text-white">{row.playerName}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.appearances}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.avgPoints ?? "—"}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.bestWeek ?? "—"}</td>
                 <td className="py-1 pr-2 text-right tabular-nums">{row.avgFieldRostered != null ? `${row.avgFieldRostered.toFixed(1)}%` : "—"}</td>
+                <td className="py-1 pr-2 text-right font-semibold tabular-nums text-amber-300">{row.avgValue != null ? row.avgValue.toFixed(2) : "—"}</td>
+                <td className="py-1 pr-2 text-right tabular-nums text-amber-300">{row.bestValueWeek != null ? row.bestValueWeek.toFixed(2) : "—"}</td>
                 <td className="py-1 text-right text-green-100/80">
                   {row.usedBy.map((u) => `${u.ownerName} (${u.count})`).join(", ") || "—"}
                 </td>

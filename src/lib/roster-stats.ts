@@ -13,6 +13,7 @@ export type RosterTendencyRow = {
   uniquePlayersUsed: number;
   mostUsedPlayer: { name: string; count: number } | null;
   bestWinningStreak: number;
+  avgValueFound: number | null;
 };
 
 export type PlayerExposureRow = {
@@ -21,6 +22,8 @@ export type PlayerExposureRow = {
   avgPoints: number | null;
   bestWeek: number | null;
   avgFieldRostered: number | null;
+  avgValue: number | null;
+  bestValueWeek: number | null;
   usedBy: Array<{ ownerName: string; count: number }>;
 };
 
@@ -55,9 +58,11 @@ export async function fetchRosterTendencies(season: number): Promise<RosterTende
     if (!(rosterRows as unknown[]).length) return [];
 
     const fieldRows = await sql`
-      SELECT w.week, fs.normalized_player_name, fs.drafted_pct
+      SELECT w.week, fs.normalized_player_name, fs.drafted_pct, fs.fantasy_points, pp.salary
       FROM football_result_weeks w
       JOIN football_result_player_field_stats fs ON fs.week_id = w.id
+      LEFT JOIN football_player_pools pool ON pool.slate_key = w.slate_key
+      LEFT JOIN football_player_pool_players pp ON pp.pool_id = pool.id AND pp.normalized_player_name = fs.normalized_player_name
       WHERE w.season = ${season}
     `;
     const winRows = await sql`SELECT winner_name, week FROM football_weekly_prizes WHERE season = ${season}`.catch(() => [] as unknown[]);
@@ -65,8 +70,12 @@ export async function fetchRosterTendencies(season: number): Promise<RosterTende
     const aliasMap = await fetchAliasToNameMap();
 
     const draftedByWeekPlayer = new Map<string, number>();
-    for (const row of fieldRows as Array<{ week: number; normalized_player_name: string; drafted_pct: string | number | null }>) {
+    const valueByWeekPlayer = new Map<string, number>();
+    for (const row of fieldRows as Array<{ week: number; normalized_player_name: string; drafted_pct: string | number | null; fantasy_points: string | number | null; salary: number | null }>) {
       if (row.drafted_pct != null) draftedByWeekPlayer.set(`${row.week}|${row.normalized_player_name}`, Number(row.drafted_pct));
+      if (row.fantasy_points != null && row.salary != null && row.salary > 0) {
+        valueByWeekPlayer.set(`${row.week}|${row.normalized_player_name}`, (Number(row.fantasy_points) / row.salary) * 1000);
+      }
     }
 
     const winWeeksByOwner = new Map<string, number[]>();
@@ -76,13 +85,15 @@ export async function fetchRosterTendencies(season: number): Promise<RosterTende
       winWeeksByOwner.set(row.winner_name, list);
     }
 
-    type Acc = { ownershipPcts: number[]; players: Map<string, { name: string; count: number }> };
+    type Acc = { ownershipPcts: number[]; values: number[]; players: Map<string, { name: string; count: number }> };
     const byOwner = new Map<string, Acc>();
     for (const row of rosterRows as Array<{ week: number; entry_name: string; normalized_player_name: string; player_name: string }>) {
       const owner = resolveOwnerName(aliasMap, row.entry_name);
-      const acc: Acc = byOwner.get(owner) ?? { ownershipPcts: [], players: new Map<string, { name: string; count: number }>() };
+      const acc: Acc = byOwner.get(owner) ?? { ownershipPcts: [], values: [], players: new Map<string, { name: string; count: number }>() };
       const pct = draftedByWeekPlayer.get(`${row.week}|${row.normalized_player_name}`);
       if (pct != null) acc.ownershipPcts.push(pct);
+      const value = valueByWeekPlayer.get(`${row.week}|${row.normalized_player_name}`);
+      if (value != null) acc.values.push(value);
       const player = acc.players.get(row.normalized_player_name) ?? { name: row.player_name, count: 0 };
       player.count += 1;
       acc.players.set(row.normalized_player_name, player);
@@ -100,9 +111,10 @@ export async function fetchRosterTendencies(season: number): Promise<RosterTende
         uniquePlayersUsed: acc.players.size,
         mostUsedPlayer: mostUsed ? { name: mostUsed.name, count: mostUsed.count } : null,
         bestWinningStreak: longestConsecutiveStreak(winWeeksByOwner.get(owner) ?? []),
+        avgValueFound: acc.values.length ? Number((acc.values.reduce((a, b) => a + b, 0) / acc.values.length).toFixed(2)) : null,
       });
     }
-    return results.sort((a, b) => (a.avgFieldOwnership ?? 0) - (b.avgFieldOwnership ?? 0));
+    return results.sort((a, b) => (b.avgValueFound ?? 0) - (a.avgValueFound ?? 0));
   } catch {
     return [];
   }
@@ -116,9 +128,11 @@ export async function fetchPlayerExposure(season: number): Promise<PlayerExposur
   const sql = getSql();
   try {
     const fieldRows = await sql`
-      SELECT fs.player_name, fs.normalized_player_name, fs.drafted_pct, fs.fantasy_points
+      SELECT fs.player_name, fs.normalized_player_name, fs.drafted_pct, fs.fantasy_points, pp.salary
       FROM football_result_weeks w
       JOIN football_result_player_field_stats fs ON fs.week_id = w.id
+      LEFT JOIN football_player_pools pool ON pool.slate_key = w.slate_key
+      LEFT JOIN football_player_pool_players pp ON pp.pool_id = pool.id AND pp.normalized_player_name = fs.normalized_player_name
       WHERE w.season = ${season}
     `;
     if (!(fieldRows as unknown[]).length) return [];
@@ -132,12 +146,15 @@ export async function fetchPlayerExposure(season: number): Promise<PlayerExposur
     `;
     const aliasMap = await fetchAliasToNameMap();
 
-    const statsByPlayer = new Map<string, { playerName: string; points: number[]; drafted: number[] }>();
-    for (const row of fieldRows as Array<{ player_name: string; normalized_player_name: string; drafted_pct: string | number | null; fantasy_points: string | number | null }>) {
+    const statsByPlayer = new Map<string, { playerName: string; points: number[]; drafted: number[]; values: number[] }>();
+    for (const row of fieldRows as Array<{ player_name: string; normalized_player_name: string; drafted_pct: string | number | null; fantasy_points: string | number | null; salary: number | null }>) {
       const key = row.normalized_player_name;
-      const entry = statsByPlayer.get(key) ?? { playerName: row.player_name, points: [], drafted: [] };
+      const entry = statsByPlayer.get(key) ?? { playerName: row.player_name, points: [], drafted: [], values: [] };
       if (row.fantasy_points != null) entry.points.push(Number(row.fantasy_points));
       if (row.drafted_pct != null) entry.drafted.push(Number(row.drafted_pct));
+      if (row.fantasy_points != null && row.salary != null && row.salary > 0) {
+        entry.values.push((Number(row.fantasy_points) / row.salary) * 1000);
+      }
       statsByPlayer.set(key, entry);
     }
 
@@ -164,6 +181,8 @@ export async function fetchPlayerExposure(season: number): Promise<PlayerExposur
         avgPoints: stats?.points.length ? Number((stats.points.reduce((a, b) => a + b, 0) / stats.points.length).toFixed(1)) : null,
         bestWeek: stats?.points.length ? Math.max(...stats.points) : null,
         avgFieldRostered: stats?.drafted.length ? Number((stats.drafted.reduce((a, b) => a + b, 0) / stats.drafted.length).toFixed(1)) : null,
+        avgValue: stats?.values.length ? Number((stats.values.reduce((a, b) => a + b, 0) / stats.values.length).toFixed(2)) : null,
+        bestValueWeek: stats?.values.length ? Number(Math.max(...stats.values).toFixed(2)) : null,
         usedBy,
       });
     }
