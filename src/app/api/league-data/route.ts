@@ -42,10 +42,6 @@ function getActiveWeekIndexes(rows: Array<{ weeks: number[] }>) {
   );
 }
 
-function getScoresForIndexes(weeks: number[], indexes: number[]) {
-  return indexes.map((index) => weeks[index] ?? 0);
-}
-
 function getAverage(values: number[]) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -68,10 +64,16 @@ function buildLeagueData(rawSheets: Record<string, any[]>) {
     
     seasons[year] = rows.map((row: any) => {
       const normalizedWeeks = row.weeks.map((score: number) => typeof score === "number" ? score : 0);
-      const activeWeekScores = getScoresForIndexes(normalizedWeeks, activeWeekIndexes);
+      // Avg Weekly / Top10 Avg use only the weeks THIS player actually has a real score for
+      // (score > 0) -- not every week the league overall was active. A week the league
+      // played but this player didn't (bye, no entry, blank cell) is not a real 0 for them
+      // and shouldn't drag their average down. Before the player has 11 real weeks played,
+      // "top 10 of their real scores" is just all of their real scores -- Top10 Avg only
+      // starts dropping a genuine worst week once there are 11+ to choose from.
+      const playedScores = normalizedWeeks.filter((score: number) => score > 0);
       const total = normalizedWeeks.reduce((sum: number, score: number) => sum + score, 0);
-      const avgWeekly = getAverage(activeWeekScores);
-      const computedTop10Avg = getTopAverage(activeWeekScores, 10);
+      const avgWeekly = getAverage(playedScores);
+      const computedTop10Avg = getTopAverage(playedScores, 10);
 
       return {
         name: row.name,
