@@ -66,6 +66,24 @@ export async function fetchOwnerAllTimePrizes(ownerName: string): Promise<OwnerS
   }
 }
 
+/** How many winners were posted each week of a season -- the weekly "cash line" varies
+ *  week to week (the admin decides how many to pay), so Bubble Watch needs the real
+ *  per-week count rather than assuming a fixed number of paid spots. */
+export async function fetchWeeklyPrizeCountsByWeek(season: number): Promise<Map<number, number>> {
+  const sql = getSql();
+  try {
+    const rows = await sql`
+      SELECT week, COUNT(*) AS c
+      FROM football_weekly_prizes
+      WHERE season = ${season}
+      GROUP BY week
+    `;
+    return new Map((rows as any[]).map((row) => [Number(row.week), Number(row.c)]));
+  } catch {
+    return new Map();
+  }
+}
+
 /** Same rollup across every season ever posted -- powers the per-owner "detail stats"
  *  profile panel's all-time Weekly Wins / $ Won figures. */
 export async function fetchAllTimePrizeSummary(): Promise<OwnerPrizeSummary[]> {

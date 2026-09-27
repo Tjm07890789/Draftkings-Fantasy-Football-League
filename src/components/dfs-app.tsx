@@ -133,61 +133,41 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
     });
   }, [activeWeeks, rows]);
 
-  const teamMetrics = React.useMemo(() => {
-    return rows.map((row) => {
-      const played = row.weeks.slice(0, playedWeekCount).filter((score) => score > 0);
-      const recentWindow = played.slice(-4);
-      const previousWindow = played.slice(-8, -4);
-      const recentAvg = mean(recentWindow);
-      const previousAvg = mean(previousWindow.length ? previousWindow : recentWindow);
-      const momentum = recentAvg - previousAvg;
-      const variability = stdDev(played);
-      const medianWins = played.reduce((wins, score, weekIndex) => {
-        return wins + (score > (weeklyMedians[weekIndex] ?? 0) ? 1 : 0);
-      }, 0);
-      const powerScore = row.avgWeekly * 0.55 + recentAvg * 0.3 + row.top10Avg * 0.15 - variability * 0.08;
-
-      return {
-        ...row,
-        recentAvg,
-        momentum,
-        variability,
-        medianWins,
-        projectedRecord: `${medianWins}-${Math.max(played.length - medianWins, 0)}`,
-        powerScore,
-        bestWeek: played.length ? Math.max(...played) : 0,
-      };
-    });
-  }, [playedWeekCount, rows, weeklyMedians]);
-
-  const trendRows = React.useMemo(
-    () => [...teamMetrics].sort((a, b) => b.recentAvg - a.recentAvg),
-    [teamMetrics],
-  );
-
-  const powerRows = React.useMemo(
-    () => [...teamMetrics].sort((a, b) => b.powerScore - a.powerScore),
-    [teamMetrics],
-  );
-
-  const totalRank = React.useMemo(() => {
-    const sorted = [...teamMetrics].sort((a, b) => b.total - a.total);
-    return new Map(sorted.map((row, index) => [row.name, index + 1]));
-  }, [teamMetrics]);
-
-  const medianWinsRank = React.useMemo(() => {
-    const sorted = [...teamMetrics].sort((a, b) => b.medianWins - a.medianWins);
-    return new Map(sorted.map((row, index) => [row.name, index + 1]));
-  }, [teamMetrics]);
-
-  const insightRows = React.useMemo(() => {
-    return [...teamMetrics]
+  // "Beat the Field" record: a literal W-L record vs. that week's real median (weeks the
+  // owner didn't play don't count either way). Iterates by real week index rather than
+  // filtering played scores first, so a bye/missed week can't shift a later score onto the
+  // wrong week's median -- the older powerScore-based version of this panel had exactly
+  // that bug.
+  const beatFieldRecords = React.useMemo(() => {
+    return rows
       .map((row) => {
-        const luckIndex = (totalRank.get(row.name) ?? 0) - (medianWinsRank.get(row.name) ?? 0);
-        return { ...row, luckIndex };
+        let wins = 0;
+        let losses = 0;
+        const recentForm: Array<"W" | "L"> = [];
+        for (let weekIndex = 0; weekIndex < playedWeekCount; weekIndex += 1) {
+          const score = row.weeks[weekIndex] ?? 0;
+          if (score <= 0) continue;
+          const median = weeklyMedians[weekIndex] ?? 0;
+          if (score > median) {
+            wins += 1;
+            recentForm.push("W");
+          } else {
+            losses += 1;
+            recentForm.push("L");
+          }
+        }
+        const played = row.weeks.slice(0, playedWeekCount).filter((score) => score > 0);
+        return {
+          name: row.name,
+          wins,
+          losses,
+          record: `${wins}-${losses}`,
+          recentForm: recentForm.slice(-5),
+          bestWeek: played.length ? Math.max(...played) : 0,
+        };
       })
-      .sort((a, b) => a.luckIndex - b.luckIndex);
-  }, [medianWinsRank, teamMetrics, totalRank]);
+      .sort((a, b) => (b.wins - b.losses) - (a.wins - a.losses) || b.wins - a.wins);
+  }, [rows, playedWeekCount, weeklyMedians]);
 
   const weeklyRankMaps = React.useMemo(() => {
     return activeWeeks.map((weekIndex) => {
@@ -206,6 +186,37 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
       return weekRankMap;
     });
   }, [activeWeeks, rows]);
+
+  // Standings Movement: per-owner rank trajectory across the season, reusing the same
+  // weeklyRankMaps as the Weekly Rank Grid. Sorted by current (most recent week's) rank.
+  const sparklineRows = React.useMemo(() => {
+    return rows
+      .map((row) => {
+        const weekRanks = activeWeeks.map((weekIndex) => weeklyRankMaps[weekIndex]?.get(row.name) ?? null);
+        const playedRanks = weekRanks.filter((rank): rank is number => rank !== null);
+        return {
+          name: row.name,
+          weekRanks: playedRanks,
+          currentRank: playedRanks.length ? playedRanks[playedRanks.length - 1] : null,
+          bestRank: playedRanks.length ? Math.min(...playedRanks) : null,
+        };
+      })
+      .filter((row) => row.weekRanks.length > 0)
+      .sort((a, b) => (a.currentRank ?? 999) - (b.currentRank ?? 999));
+  }, [rows, activeWeeks, weeklyRankMaps]);
+
+  // Closest Calls: the tightest margin between two adjacently-ranked real scores, for
+  // every week played so far -- reuses the same per-week logic as the Weekly Storylines
+  // banner (computeWeekStorylines), just run across all weeks instead of only the latest.
+  const closestCallsByWeek = React.useMemo(() => {
+    return activeWeeks
+      .map((weekIndex) => {
+        const storylines = computeWeekStorylines(rows, weekIndex);
+        return storylines?.closestMargin ? { week: weekIndex + 1, ...storylines.closestMargin } : null;
+      })
+      .filter((entry): entry is { week: number; a: string; b: string; gap: number } => entry !== null)
+      .sort((a, b) => a.gap - b.gap);
+  }, [rows, activeWeeks]);
 
   const weeklyRankRows = React.useMemo(() => {
     const baseRows = rows.map((row) => {
@@ -321,86 +332,11 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
       </div>
 
       {statsSubview === "insights" && (
-      <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
-        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Team Trends</h3>
-          <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-white/20 text-left text-green-100">
-                  <th className="py-1">Team</th>
-                  <th className="py-1 text-right">Recent 4</th>
-                  <th className="py-1 text-right">Momentum</th>
-                  <th className="py-1 text-right">Best Wk</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trendRows.map((row) => (
-                  <tr key={`trend-${row.name}`} className="border-b border-white/10">
-                    <td className="py-1 font-semibold">{row.name}</td>
-                    <td className="py-1 text-right">{formatCell(row.recentAvg)}</td>
-                    <td className={`py-1 text-right ${row.momentum >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                      {formatSigned(row.momentum)}
-                    </td>
-                    <td className="py-1 text-right">{formatCell(row.bestWeek)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Power Rankings</h3>
-          <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-white/20 text-left text-green-100">
-                  <th className="w-10 py-1 text-right tabular-nums">#</th>
-                  <th className="py-1 pl-3">Team</th>
-                  <th className="py-1 text-right">Power</th>
-                  <th className="py-1 text-right">Variance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {powerRows.map((row, index) => (
-                  <tr key={`power-${row.name}`} className="border-b border-white/10">
-                    <td className="w-10 py-1 pr-1 text-right font-semibold tabular-nums">{index + 1}</td>
-                    <td className="py-1 pl-3 font-semibold">{row.name}</td>
-                    <td className="py-1 text-right">{formatCell(row.powerScore)}</td>
-                    <td className="py-1 text-right">{formatCell(row.variability)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
-          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Matchup Insights</h3>
-          <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-white/20 text-left text-green-100">
-                  <th className="py-1">Team</th>
-                  <th className="py-1 text-right">Vs Median</th>
-                  <th className="py-1 text-right">Luck Index</th>
-                </tr>
-              </thead>
-              <tbody>
-                {insightRows.map((row) => (
-                  <tr key={`insight-${row.name}`} className="border-b border-white/10">
-                    <td className="py-1 font-semibold">{row.name}</td>
-                    <td className="py-1 text-right">{row.projectedRecord}</td>
-                    <td className={`py-1 text-right ${row.luckIndex <= 0 ? "text-emerald-300" : "text-amber-200"}`}>
-                      {formatSigned(row.luckIndex)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
+        <BeatFieldRecordPanel records={beatFieldRecords} />
+        <StandingsMovementPanel rows={sparklineRows} fieldSize={rows.length} />
+        <PersonalityAwardsPanel seasonLabel={seasonLabel} rows={rows} />
+        <ClosestCallsPanel seasonLabel={seasonLabel} rows={rows} closestCalls={closestCallsByWeek} activeWeeks={activeWeeks} />
       </div>
       )}
 
@@ -481,6 +417,324 @@ function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel:
       {statsSubview === "roster-tendencies" && <RosterTendenciesPanel seasonLabel={seasonLabel} />}
       {statsSubview === "player-exposure" && <PlayerExposurePanel seasonLabel={seasonLabel} />}
     </section>
+  );
+}
+
+type BeatFieldRecordRow = { name: string; wins: number; losses: number; record: string; recentForm: Array<"W" | "L">; bestWeek: number };
+
+/** A literal win-loss record against the real weekly field median, replacing the old
+ *  Momentum/Power-Score panels (10 Sep 2026: meaningless with <=2 weeks played, and the
+ *  power-score formula's weights were never explained on-page). Meaningful from week 1. */
+function BeatFieldRecordPanel({ records }: { records: BeatFieldRecordRow[] }) {
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Beat the Field</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">
+        A real win-loss record against that week&apos;s field median -- score above the median, that&apos;s a win. Weeks you
+        didn&apos;t play don&apos;t count either way.
+      </p>
+      <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/20 text-left text-green-100">
+              <th className="py-1">Owner</th>
+              <th className="py-1 text-right">Record</th>
+              <th className="py-1 text-right">Last 5</th>
+              <th className="py-1 text-right">Best Wk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((row) => (
+              <tr key={row.name} className="border-b border-white/10">
+                <td className="py-1 font-semibold">{row.name}</td>
+                <td className="py-1 text-right font-semibold tabular-nums">{row.record}</td>
+                <td className="py-1 text-right">
+                  {row.recentForm.map((result, index) => (
+                    <span
+                      key={index}
+                      className={`ml-0.5 inline-block h-4 w-4 rounded-full text-center text-[9px] font-bold leading-4 ${result === "W" ? "bg-emerald-400/30 text-emerald-200" : "bg-rose-400/20 text-rose-300"}`}
+                    >
+                      {result}
+                    </span>
+                  ))}
+                </td>
+                <td className="py-1 text-right tabular-nums">{formatCell(row.bestWeek)}</td>
+              </tr>
+            ))}
+            {!records.length && (
+              <tr>
+                <td colSpan={4} className="py-3 text-center text-green-100/70">No weeks played yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
+/** Single-series rank sparkline -- one consistent color throughout (identity is already
+ *  labeled by the owner's name in the same row, so no legend/categorical palette needed).
+ *  Y-axis is inverted: rank 1 (best) draws at the top. */
+function RankSparkline({ weekRanks, maxRank }: { weekRanks: number[]; maxRank: number }) {
+  const width = 100;
+  const height = 28;
+  const padding = 3;
+  if (weekRanks.length < 2) {
+    return (
+      <span className="text-[11px] text-green-100/50">not enough weeks yet</span>
+    );
+  }
+  const span = Math.max(maxRank - 1, 1);
+  const points = weekRanks.map((rank, index) => {
+    const x = padding + (index / (weekRanks.length - 1)) * (width - padding * 2);
+    const y = padding + ((rank - 1) / span) * (height - padding * 2);
+    return [x, y] as const;
+  });
+  const path = points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const [lastX, lastY] = points[points.length - 1];
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="inline-block align-middle"
+      role="img"
+      aria-label={`Weekly rank trend: ${weekRanks.map((r) => `#${r}`).join(" then ")}`}
+    >
+      <path d={path} fill="none" stroke="#6ee7b7" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastX} cy={lastY} r={3} fill="#6ee7b7" />
+    </svg>
+  );
+}
+
+type SparklineRow = { name: string; weekRanks: number[]; currentRank: number | null; bestRank: number | null };
+
+/** Standings Movement -- replaces the old flat Power Rankings table with an actual visual
+ *  of each owner's weekly rank trajectory (small multiples: one compact sparkline per row,
+ *  rather than one crowded multi-line chart that would need 20+ hues to stay readable). */
+function StandingsMovementPanel({ rows, fieldSize }: { rows: SparklineRow[]; fieldSize: number }) {
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Standings Movement</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">
+        Weekly rank over the season so far -- a line climbing toward the top is trending toward 1st place.
+      </p>
+      <div className="max-h-[42vh] overflow-auto lg:max-h-[56vh]">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/20 text-left text-green-100">
+              <th className="py-1">Owner</th>
+              <th className="py-1">Trend</th>
+              <th className="py-1 text-right">Current</th>
+              <th className="py-1 text-right">Best</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.name} className="border-b border-white/10">
+                <td className="py-1 font-semibold">{row.name}</td>
+                <td className="py-1"><RankSparkline weekRanks={row.weekRanks} maxRank={fieldSize} /></td>
+                <td className="py-1 text-right tabular-nums">{row.currentRank != null ? `#${row.currentRank}` : "—"}</td>
+                <td className="py-1 text-right tabular-nums">{row.bestRank != null ? `#${row.bestRank}` : "—"}</td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr>
+                <td colSpan={4} className="py-3 text-center text-green-100/70">No weeks played yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
+/** DFS Personality Awards -- fun, ownable superlatives built entirely from data already
+ *  computed for Roster Tendencies (needs a real DK results import; degrades gracefully like
+ *  that panel does until then). No minimum-weeks problem the way Momentum had. */
+function PersonalityAwardsPanel({ seasonLabel, rows }: { seasonLabel: string; rows: SeasonRow[] }) {
+  const [tendencies, setTendencies] = React.useState<RosterTendencyRow[] | null>(null);
+  const numericSeason = Number(seasonLabel);
+
+  React.useEffect(() => {
+    if (!Number.isFinite(numericSeason)) {
+      setTendencies([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/roster-stats?season=${numericSeason}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setTendencies(data.tendencies ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setTendencies([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericSeason]);
+
+  if (tendencies === null) {
+    return <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">Loading personality awards...</div>;
+  }
+
+  if (!tendencies.length) {
+    return (
+      <div className="rounded-lg border border-white/20 bg-black/20 p-4 text-center text-xs text-green-100/70">
+        No DK results imported for this season yet -- once you import a week&apos;s contest-standings CSV, personality awards
+        (Contrarian, Chalk, Bargain Hunter...) will show up here.
+      </div>
+    );
+  }
+
+  const ownershipRanked = [...tendencies].filter((t) => t.avgFieldOwnership != null);
+  const contrarian = [...ownershipRanked].sort((a, b) => (a.avgFieldOwnership ?? 0) - (b.avgFieldOwnership ?? 0))[0];
+  const chalk = [...ownershipRanked].sort((a, b) => (b.avgFieldOwnership ?? 0) - (a.avgFieldOwnership ?? 0))[0];
+  const bargainHunter = [...tendencies].filter((t) => t.avgValueFound != null).sort((a, b) => (b.avgValueFound ?? 0) - (a.avgValueFound ?? 0))[0];
+  const rotator = [...tendencies].sort((a, b) => b.uniquePlayersUsed - a.uniquePlayersUsed)[0];
+  const bestWeekEver = rows.reduce<{ name: string; score: number } | null>((best, row) => {
+    const max = row.weeks.length ? Math.max(0, ...row.weeks) : 0;
+    if (max > 0 && (!best || max > best.score)) return { name: row.name, score: max };
+    return best;
+  }, null);
+
+  const awards = [
+    contrarian && { emoji: "🕵️", title: "The Contrarian", name: contrarian.ownerName, detail: `${(contrarian.avgFieldOwnership ?? 0).toFixed(1)}% avg field ownership` },
+    chalk && { emoji: "🧊", title: "Mr. Chalk", name: chalk.ownerName, detail: `${(chalk.avgFieldOwnership ?? 0).toFixed(1)}% avg field ownership` },
+    bargainHunter && { emoji: "💰", title: "Bargain Hunter", name: bargainHunter.ownerName, detail: `${(bargainHunter.avgValueFound ?? 0).toFixed(2)} pts/$1K avg value` },
+    rotator && { emoji: "🔄", title: "The Rotator", name: rotator.ownerName, detail: `${rotator.uniquePlayersUsed} unique players used` },
+    bestWeekEver && { emoji: "🚀", title: "Highest Ceiling", name: bestWeekEver.name, detail: `${bestWeekEver.score.toFixed(2)} pts, best single week` },
+  ].filter((award): award is { emoji: string; title: string; name: string; detail: string } => Boolean(award));
+
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">DFS Personality Awards</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">Season-long superlatives built from real roster-construction data.</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {awards.map((award) => (
+          <div key={award.title} className="rounded-md bg-white/5 p-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-green-100/70">
+              {award.emoji} {award.title}
+            </div>
+            <div className="font-semibold text-white">{award.name}</div>
+            <div className="text-[11px] text-green-100/70">{award.detail}</div>
+          </div>
+        ))}
+        {!awards.length && <p className="text-[11px] text-green-100/70">Not enough data yet.</p>}
+      </div>
+    </article>
+  );
+}
+
+type ClosestCallEntry = { week: number; a: string; b: string; gap: number };
+
+/** Closest Calls & Bubble Watch -- tightest weekly margins (pure Sheet data, no minimum
+ *  weeks needed) plus who missed that week's real posted cash line by the least (needs the
+ *  admin's Weekly Winners postings; the paid-spot count is read per week since it varies,
+ *  not assumed fixed). */
+function ClosestCallsPanel({
+  seasonLabel,
+  rows,
+  closestCalls,
+  activeWeeks,
+}: {
+  seasonLabel: string;
+  rows: SeasonRow[];
+  closestCalls: ClosestCallEntry[];
+  activeWeeks: number[];
+}) {
+  const [prizeCounts, setPrizeCounts] = React.useState<Record<string, number> | null>(null);
+  const numericSeason = Number(seasonLabel);
+
+  React.useEffect(() => {
+    if (!Number.isFinite(numericSeason)) {
+      setPrizeCounts({});
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/weekly-prizes?season=${numericSeason}&scope=by-week`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setPrizeCounts(data.counts ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setPrizeCounts({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericSeason]);
+
+  const bubbleWatch = React.useMemo(() => {
+    if (!prizeCounts) return [];
+    return activeWeeks
+      .map((weekIndex) => {
+        const week = weekIndex + 1;
+        const paidCount = prizeCounts[String(week)];
+        if (!paidCount) return null;
+        const ranked = rows
+          .map((row) => ({ name: row.name, score: row.weeks[weekIndex] ?? 0 }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score);
+        const lastPaid = ranked[paidCount - 1];
+        const bubble = ranked[paidCount];
+        if (!lastPaid || !bubble) return null;
+        return { week, bubbleName: bubble.name, gap: lastPaid.score - bubble.score };
+      })
+      .filter((entry): entry is { week: number; bubbleName: string; gap: number } => entry !== null)
+      .sort((a, b) => a.gap - b.gap);
+  }, [prizeCounts, rows, activeWeeks]);
+
+  return (
+    <article className="min-h-0 rounded-lg border border-white/20 bg-black/20 p-3">
+      <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-green-100">Closest Calls &amp; Bubble Watch</h3>
+      <p className="mb-3 text-[11px] text-green-100/70">
+        The tightest weekly margins, and who missed that week&apos;s posted cash line by the least.
+      </p>
+      <div className="max-h-[42vh] space-y-3 overflow-auto lg:max-h-[56vh]">
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Closest Margins</div>
+          {closestCalls.length ? (
+            <table className="w-full text-xs">
+              <tbody>
+                {closestCalls.slice(0, 8).map((call) => (
+                  <tr key={call.week} className="border-b border-white/10">
+                    <td className="py-1 text-green-100/70">Wk {call.week}</td>
+                    <td className="py-1 font-semibold">
+                      {call.a} <span className="font-normal text-green-100/60">over</span> {call.b}
+                    </td>
+                    <td className="py-1 text-right tabular-nums">{call.gap.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-[11px] text-green-100/70">No weeks played yet.</p>
+          )}
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-green-100/70">Bubble Watch (missed the cash line)</div>
+          {bubbleWatch.length ? (
+            <table className="w-full text-xs">
+              <tbody>
+                {bubbleWatch.slice(0, 8).map((bubble) => (
+                  <tr key={bubble.week} className="border-b border-white/10">
+                    <td className="py-1 text-green-100/70">Wk {bubble.week}</td>
+                    <td className="py-1 font-semibold">{bubble.bubbleName}</td>
+                    <td className="py-1 text-right tabular-nums text-amber-300">-{bubble.gap.toFixed(2)} pts</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-[11px] text-green-100/70">No weekly winners posted yet.</p>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 

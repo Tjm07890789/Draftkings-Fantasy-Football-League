@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchSeasonPrizeSummary, fetchAllTimePrizeSummary, fetchOwnerSeasonPrizes, fetchOwnerAllTimePrizes } from "@/lib/prizes";
+import { fetchSeasonPrizeSummary, fetchAllTimePrizeSummary, fetchOwnerSeasonPrizes, fetchOwnerAllTimePrizes, fetchWeeklyPrizeCountsByWeek } from "@/lib/prizes";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,10 @@ export async function GET(request: Request) {
     if (owner && season) {
       const weeks = await fetchOwnerSeasonPrizes(Number(season), owner);
       return NextResponse.json({ weeks }, { status: 200 });
+    }
+    if (scope === "by-week" && season) {
+      const counts = await fetchWeeklyPrizeCountsByWeek(Number(season));
+      return NextResponse.json({ counts: Object.fromEntries(counts) }, { status: 200 });
     }
     if (scope === "all-time") {
       const summary = await fetchAllTimePrizeSummary();
