@@ -48,6 +48,8 @@ export type WeeklyResultLineupPlayer = {
   fpEcrRank: number | null;
   injuryStatus: string | null;
   probabilityOfPlaying: number | null;
+  salary: number | null;
+  value: number | null;
 };
 
 function getSql() {
@@ -300,6 +302,21 @@ export async function fetchEntryLineup(season: number, week: number, entryName: 
     ),
   );
 
+  let salaryByName = new Map<string, number>();
+  try {
+    const salaryRows = await sql`
+      SELECT pp.normalized_player_name, pp.salary
+      FROM football_player_pool_players pp
+      JOIN football_player_pools pool ON pool.id = pp.pool_id
+      WHERE pool.slate_key = ${slateKey}
+    `;
+    salaryByName = new Map(
+      (salaryRows as Array<{ normalized_player_name: string; salary: number }>).map((row) => [row.normalized_player_name, Number(row.salary)]),
+    );
+  } catch {
+    // football_player_pool_players may not exist yet in some environments -- degrade gracefully.
+  }
+
   let signalsByName = new Map<string, { fp_projection: number | null; fp_ecr_rank: number | null; injury_status: string | null; probability_of_playing: number | null }>();
   try {
     const signalRows = await sql`
@@ -325,15 +342,20 @@ export async function fetchEntryLineup(season: number, week: number, entryName: 
   return (playerRows as Array<{ sort_order: number; player_name: string; normalized_player_name: string; roster_position: string | null }>).map((row) => {
     const fieldStat = fieldStatsByName.get(row.normalized_player_name);
     const signal = signalsByName.get(row.normalized_player_name);
+    const salary = salaryByName.get(row.normalized_player_name) ?? null;
+    const fieldPoints = fieldStat?.fantasy_points ?? null;
+    const value = fieldPoints != null && salary != null && salary > 0 ? Number(((fieldPoints / salary) * 1000).toFixed(2)) : null;
     return {
       rosterPosition: row.roster_position,
       playerName: row.player_name,
-      fieldPoints: fieldStat?.fantasy_points ?? null,
+      fieldPoints,
       draftedPct: fieldStat?.drafted_pct ?? null,
       fpProjection: signal?.fp_projection ?? null,
       fpEcrRank: signal?.fp_ecr_rank ?? null,
       injuryStatus: signal?.injury_status ?? null,
       probabilityOfPlaying: signal?.probability_of_playing ?? null,
+      salary,
+      value,
     };
   });
 }

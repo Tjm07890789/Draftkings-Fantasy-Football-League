@@ -1642,6 +1642,8 @@ type WeeklyResultLineupPlayer = {
   fpEcrRank: number | null;
   injuryStatus: string | null;
   probabilityOfPlaying: number | null;
+  salary: number | null;
+  value: number | null;
 };
 
 function injuryTagColor(status: string | null): string {
@@ -1679,12 +1681,14 @@ function EntryLineupPanel({ season, week, entryName }: { season: number; week: n
 
   return (
     <div className="overflow-x-auto rounded-lg border border-white/15 bg-black/25 p-3">
-      <table className="w-full min-w-[560px] text-xs">
+      <table className="w-full min-w-[720px] text-xs">
         <thead>
           <tr className="border-b border-white/20 text-left text-green-100">
             <th className="py-1 pr-2">Slot</th>
             <th className="py-1 pr-2">Player</th>
+            <th className="py-1 pr-2 text-right">Salary</th>
             <th className="py-1 pr-2 text-right">Points</th>
+            <th className="py-1 pr-2 text-right">Value</th>
             <th className="py-1 pr-2 text-right">Rostered</th>
             <th className="py-1 pr-2 text-right">FP Proj</th>
             <th className="py-1 pr-2 text-right">FP Rank</th>
@@ -1696,7 +1700,9 @@ function EntryLineupPanel({ season, week, entryName }: { season: number; week: n
             <tr key={`${player.playerName}-${index}`} className="border-b border-white/10">
               <td className="py-1 pr-2 font-semibold text-green-100">{player.rosterPosition ?? "-"}</td>
               <td className="py-1 pr-2 font-semibold text-white">{player.playerName}</td>
+              <td className="py-1 pr-2 text-right">{player.salary != null ? `$${player.salary.toLocaleString()}` : "—"}</td>
               <td className="py-1 pr-2 text-right">{player.fieldPoints ?? "—"}</td>
+              <td className="py-1 pr-2 text-right font-semibold text-amber-300">{player.value != null ? `${player.value.toFixed(2)}` : "—"}</td>
               <td className="py-1 pr-2 text-right">{player.draftedPct != null ? `${player.draftedPct.toFixed(1)}%` : "—"}</td>
               <td className="py-1 pr-2 text-right">{player.fpProjection ?? "—"}</td>
               <td className="py-1 pr-2 text-right">{player.fpEcrRank ?? "—"}</td>
