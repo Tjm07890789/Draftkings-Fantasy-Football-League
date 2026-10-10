@@ -50,21 +50,24 @@ function buildLeagueData(rawSheets) {
   for (const year of years) {
     const rows = rawSheets[year] ?? [];
     const activeWeekIndexes = getActiveWeekIndexes(rows);
-    const activeWeekCount = activeWeekIndexes.length;
-    const currentWeek = activeWeekIndexes.length ? activeWeekIndexes[activeWeekIndexes.length - 1] + 1 : 0;
 
     seasons[year] = rows.map((row) => {
       const normalizedWeeks = row.weeks.map((score) => (typeof score === "number" ? score : 0));
-      const activeWeekScores = getScoresForIndexes(normalizedWeeks, activeWeekIndexes);
+      // Avg Weekly / Top10 Avg use only the weeks THIS player actually has a real score for
+      // (score > 0). A week the league played but this player didn't (no entry, bye, blank cell)
+      // is not a real 0 for them and must not drag their average down -- this matters most in
+      // the first weeks of a season. Top10 Avg only starts dropping a genuine worst week once
+      // a player has 11+ real weeks. Keep in step with src/app/api/league-data/route.ts.
+      const playedWeekIndexes = activeWeekIndexes.filter((index) => (normalizedWeeks[index] ?? 0) > 0);
+      const playedScores = getScoresForIndexes(normalizedWeeks, playedWeekIndexes);
       const total = normalizedWeeks.reduce((sum, score) => sum + score, 0);
-      const avgWeekly = getAverage(activeWeekScores);
-      const computedTop10Avg = getTopAverage(activeWeekScores, 10);
-      const top10Avg = currentWeek <= 11 ? avgWeekly : computedTop10Avg;
+      const avgWeekly = getAverage(playedScores);
+      const top10Avg = getTopAverage(playedScores, 10);
 
       return {
         name: row.name,
         weeks: normalizedWeeks.map((score) => formatNumber(score)),
-        top10WeekIndexes: getTopWeekIndexes(normalizedWeeks, activeWeekIndexes),
+        top10WeekIndexes: getTopWeekIndexes(normalizedWeeks, playedWeekIndexes),
         total: formatNumber(total),
         avgWeekly: formatNumber(avgWeekly),
         top10Avg: formatNumber(top10Avg),
