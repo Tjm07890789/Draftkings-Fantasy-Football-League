@@ -2157,20 +2157,25 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
     });
   }, [rows, weekRanksByName]);
 
+  // Footer averages cover only players who actually have a score this season. Someone with no
+  // entries at all (a 0 total, 0 average) isn't a real 0 for the league and would drag every
+  // footer figure down -- most visible in the first weeks of a season.
+  const scoredRows = React.useMemo(() => rows.filter((row) => row.weeks.some((score) => score > 0)), [rows]);
+
   const averageTotal = React.useMemo(() => {
-    if (!rows.length) return 0;
-    return rows.reduce((sum, row) => sum + row.total, 0) / rows.length;
-  }, [rows]);
+    if (!scoredRows.length) return 0;
+    return scoredRows.reduce((sum, row) => sum + row.total, 0) / scoredRows.length;
+  }, [scoredRows]);
 
   const averageAvgWeekly = React.useMemo(() => {
-    if (!rows.length) return 0;
-    return rows.reduce((sum, row) => sum + row.avgWeekly, 0) / rows.length;
-  }, [rows]);
+    if (!scoredRows.length) return 0;
+    return scoredRows.reduce((sum, row) => sum + row.avgWeekly, 0) / scoredRows.length;
+  }, [scoredRows]);
 
   const averageTop10Avg = React.useMemo(() => {
-    if (!rows.length) return 0;
-    return rows.reduce((sum, row) => sum + row.top10Avg, 0) / rows.length;
-  }, [rows]);
+    if (!scoredRows.length) return 0;
+    return scoredRows.reduce((sum, row) => sum + row.top10Avg, 0) / scoredRows.length;
+  }, [scoredRows]);
 
   const handleSort = (column: SortColumn) => {
     if (column === sortColumn) {
