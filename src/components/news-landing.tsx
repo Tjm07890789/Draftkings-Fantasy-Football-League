@@ -1,4 +1,6 @@
 import { fetchPublishedNews } from "@/lib/dfs-news";
+import { fetchWeeklyRecap, type WeeklyRecap } from "@/lib/weekly-recap";
+import { WeeklyRecapCard } from "@/components/weekly-recap-card";
 import type { DfsNewsPost } from "@/lib/dfs-news";
 import Image from "next/image";
 import Link from "next/link";
@@ -54,13 +56,20 @@ function getLatestPublishedAt(posts: DfsNewsPost[]) {
   }, null);
 }
 
-export async function NewsLanding() {
+export async function NewsLanding({ recapWeek }: { recapWeek?: number } = {}) {
   let posts: DfsNewsPost[] = [];
+  let recap: WeeklyRecap | null = null;
 
   try {
     posts = await fetchPublishedNews();
   } catch (error) {
     console.error("DFS news fetch failed:", error);
+  }
+
+  try {
+    recap = await fetchWeeklyRecap(recapWeek);
+  } catch (error) {
+    console.error("DFS weekly recap failed:", error);
   }
 
   const latestPublishedAt = getLatestPublishedAt(posts);
@@ -122,6 +131,8 @@ export async function NewsLanding() {
             </div>
           </div>
         </section>
+
+        {recap && <WeeklyRecapCard recap={recap} />}
 
         {posts.length ? (
           posts.map((post) => (

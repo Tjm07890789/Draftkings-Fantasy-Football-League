@@ -8,6 +8,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 type View = "current" | "previous" | "career";
 
+type StatsSubview = "insights" | "weekly-ranks" | "prizes" | "roster-tendencies" | "player-exposure";
+type SeasonPanelKey = "grid" | "statistics" | "results";
+
+/** Where a ?go= link from the News page recap should land on the league site. */
+type DeepLink = { panel: SeasonPanelKey; statsSubview?: StatsSubview; week?: number };
+
+const STATS_SUBVIEWS: StatsSubview[] = ["insights", "weekly-ranks", "prizes", "roster-tendencies", "player-exposure"];
+
+/** ?go=grid | results | career | stats-<subview>, plus &week=N for results. */
+function parseDeepLink(search: string): { link: DeepLink | null; career: boolean } {
+  const params = new URLSearchParams(search);
+  const go = params.get("go");
+  if (!go) return { link: null, career: false };
+  if (go === "career") return { link: null, career: true };
+  if (go === "grid") return { link: { panel: "grid" }, career: false };
+  if (go === "results") {
+    const week = Number.parseInt(params.get("week") ?? "", 10);
+    return { link: { panel: "results", week: Number.isFinite(week) ? week : undefined }, career: false };
+  }
+  if (go.startsWith("stats-")) {
+    const sub = go.slice("stats-".length) as StatsSubview;
+    if (STATS_SUBVIEWS.includes(sub)) return { link: { panel: "statistics", statsSubview: sub }, career: false };
+  }
+  return { link: null, career: false };
+}
+
 type SeasonRow = {
   name: string;
   weeks: number[];
@@ -98,12 +124,11 @@ function formatSigned(value: number) {
   return rounded.toFixed(2);
 }
 
-function StatisticsView({ rows, seasonLabel }: { rows: SeasonRow[]; seasonLabel: string }) {
-  type StatsSubview = "insights" | "weekly-ranks" | "prizes" | "roster-tendencies" | "player-exposure";
+function StatisticsView({ rows, seasonLabel, initialSubview }: { rows: SeasonRow[]; seasonLabel: string; initialSubview?: StatsSubview }) {
   type RankSortColumn = "name" | "avgRank" | `week-${number}`;
   type RankSortDirection = "asc" | "desc";
 
-  const [statsSubview, setStatsSubview] = React.useState<StatsSubview>("insights");
+  const [statsSubview, setStatsSubview] = React.useState<StatsSubview>(initialSubview ?? "insights");
   const [rankSortColumn, setRankSortColumn] = React.useState<RankSortColumn>("avgRank");
   const [rankSortDirection, setRankSortDirection] = React.useState<RankSortDirection>("asc");
   const [jumpWeek, setJumpWeek] = React.useState<string>("avg");
@@ -1715,8 +1740,12 @@ function EntryLineupPanel({ season, week, entryName }: { season: number; week: n
   );
 }
 
-function WeekResultCard({ season, week, participantCount, rows }: { season: number; week: number; participantCount: number; rows: SeasonRow[] }) {
-  const [expanded, setExpanded] = React.useState(false);
+function WeekResultCard({ season, week, participantCount, rows, defaultExpanded }: { season: number; week: number; participantCount: number; rows: SeasonRow[]; defaultExpanded?: boolean }) {
+  const [expanded, setExpanded] = React.useState(Boolean(defaultExpanded));
+  const cardRef = React.useRef<HTMLElement | null>(null);
+  React.useEffect(() => {
+    if (defaultExpanded) cardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [defaultExpanded]);
   const [summary, setSummary] = React.useState<WeeklyResultsSummary | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [openEntry, setOpenEntry] = React.useState<string | null>(null);
@@ -1746,7 +1775,7 @@ function WeekResultCard({ season, week, participantCount, rows }: { season: numb
   const recapText = summary?.narrativeOverride?.trim() || buildWeeklyRecapText(storylines, summary);
 
   return (
-    <article className="rounded-lg border border-white/20 bg-black/20 p-3">
+    <article ref={cardRef} className="scroll-mt-24 rounded-lg border border-white/20 bg-black/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-bold text-white">Week {week}</div>
@@ -1866,7 +1895,7 @@ function WeekResultCard({ season, week, participantCount, rows }: { season: numb
   );
 }
 
-function WeeklyResultsView({ seasonYear, rows }: { seasonYear: string; rows: SeasonRow[] }) {
+function WeeklyResultsView({ seasonYear, rows, initialWeek }: { seasonYear: string; rows: SeasonRow[]; initialWeek?: number }) {
   const [weeks, setWeeks] = React.useState<WeeklyResultsListItem[] | null>(null);
   const numericSeason = Number(seasonYear);
   const hasValidSeason = Number.isFinite(numericSeason);
@@ -1910,7 +1939,7 @@ function WeeklyResultsView({ seasonYear, rows }: { seasonYear: string; rows: Sea
   return (
     <div className="space-y-3">
       {weeks.map((item) => (
-        <WeekResultCard key={`${item.season}-${item.week}`} season={item.season} week={item.week} participantCount={item.participantCount} rows={rows} />
+        <WeekResultCard key={`${item.season}-${item.week}`} season={item.season} week={item.week} participantCount={item.participantCount} rows={rows} defaultExpanded={initialWeek === item.week} />
       ))}
     </div>
   );
@@ -2007,7 +2036,7 @@ function PlayerWeeklyResultsPanel({ ownerName, season, rows, onClose }: { ownerN
   );
 }
 
-function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string; rows: SeasonRow[]; seasonLabel: string; initialPanel?: "grid" | "statistics" | "results" }) {
+function SeasonGrid({ title, rows, seasonLabel, initialPanel, initialStatsSubview, initialWeek }: { title: string; rows: SeasonRow[]; seasonLabel: string; initialPanel?: SeasonPanelKey; initialStatsSubview?: StatsSubview; initialWeek?: number }) {
   type SeasonPanel = "grid" | "statistics" | "results";
   type DisplayMode = "points" | "rank";
   const totalGridColumns = 23;
@@ -2438,12 +2467,12 @@ function SeasonGrid({ title, rows, seasonLabel, initialPanel }: { title: string;
       )}
       {seasonPanel === "statistics" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <StatisticsView rows={rows} seasonLabel={seasonLabel} />
+          <StatisticsView rows={rows} seasonLabel={seasonLabel} initialSubview={initialStatsSubview} />
         </div>
       )}
       {seasonPanel === "results" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <WeeklyResultsView seasonYear={seasonLabel} rows={rows} />
+          <WeeklyResultsView seasonYear={seasonLabel} rows={rows} initialWeek={initialWeek} />
         </div>
       )}
     </section>
@@ -2831,6 +2860,10 @@ export function DFSApp({ data }: { data: LeagueData }) {
   const [view, setView] = React.useState<View>("current");
   const [selectedYear, setSelectedYear] = React.useState<string | null>(null);
   const [forceCurrentResults, setForceCurrentResults] = React.useState(false);
+  // Set by a ?go= link from the News page recap: which panel to open, and whether to show the
+  // desktop layout for this visit (the stats and results panels only exist there).
+  const [deepLink, setDeepLink] = React.useState<DeepLink | null>(null);
+  const [deepLinkDesktop, setDeepLinkDesktop] = React.useState(false);
   
   // Mobile/Desktop layout state
   const [layoutPreference, setLayoutPreference] = React.useState<LayoutPreference>("auto");
@@ -2888,8 +2921,34 @@ export function DFSApp({ data }: { data: LeagueData }) {
     window.localStorage.setItem(LAYOUT_PREF_KEY, layoutPreference);
   }, [layoutPreference]);
 
+  // Runs after mount so it wins over the saved-view cookie restore below.
+  React.useEffect(() => {
+    if (!mounted) return;
+    const { link, career } = parseDeepLink(window.location.search);
+    if (!link && !career) return;
+    if (career) {
+      setView("career");
+      setMobileTab("stats");
+    } else if (link) {
+      setView("current");
+      setDeepLink(link);
+      setDeepLinkDesktop(true);
+    }
+    // Drop the go/week params so a refresh or share doesn't replay the jump.
+    const params = new URLSearchParams(window.location.search);
+    params.delete("go");
+    params.delete("week");
+    const rest = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
+  }, [mounted]);
+
+  const chooseLayout = React.useCallback((preference: LayoutPreference) => {
+    setDeepLinkDesktop(false);
+    setLayoutPreference(preference);
+  }, []);
+
   // Only show desktop view after mount and when explicitly desktop
-  const isDesktopView = mounted && (layoutPreference === "desktop" || (layoutPreference === "auto" && isDesktopByViewport === true));
+  const isDesktopView = mounted && (deepLinkDesktop || layoutPreference === "desktop" || (layoutPreference === "auto" && isDesktopByViewport === true));
   const isMobileView = !isDesktopView;
 
   const currentRows = data.currentSeasonYear ? data.seasons[data.currentSeasonYear] ?? [] : [];
@@ -3035,7 +3094,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
         <div className="hidden lg:flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setLayoutPreference("mobile")}
+            onClick={() => chooseLayout("mobile")}
             className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
               isMobileView 
                 ? "border-green-400 bg-green-600 text-white" 
@@ -3046,7 +3105,7 @@ export function DFSApp({ data }: { data: LeagueData }) {
           </button>
           <button
             type="button"
-            onClick={() => setLayoutPreference("desktop")}
+            onClick={() => chooseLayout("desktop")}
             className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
               isDesktopView 
                 ? "border-green-400 bg-green-600 text-white" 
@@ -3115,7 +3174,9 @@ export function DFSApp({ data }: { data: LeagueData }) {
                 title={`Current Weekly Season Grid (${data.currentSeasonYear ?? ""})`}
                 rows={currentRows}
                 seasonLabel={data.currentSeasonYear ?? "Current Season"}
-                initialPanel={!seasonHasStarted(currentRows) && forceCurrentResults ? "results" : "grid"}
+                initialPanel={deepLink?.panel ?? (!seasonHasStarted(currentRows) && forceCurrentResults ? "results" : "grid")}
+                initialStatsSubview={deepLink?.statsSubview}
+                initialWeek={deepLink?.week}
               />
             </>
           )}
@@ -3420,14 +3481,14 @@ export function DFSApp({ data }: { data: LeagueData }) {
                   </Link>
                   <button
                     type="button"
-                    onClick={() => setLayoutPreference("desktop")}
+                    onClick={() => chooseLayout("desktop")}
                     className="mb-2 w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
                     Switch to Desktop View
                   </button>
                   <button
                     type="button"
-                    onClick={() => setLayoutPreference("auto")}
+                    onClick={() => chooseLayout("auto")}
                     className="w-full rounded-lg bg-white/5 px-4 py-3 text-left font-medium text-green-50 transition hover:bg-white/15"
                   >
                     Use Auto Device Layout
